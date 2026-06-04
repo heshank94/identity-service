@@ -4,6 +4,7 @@ package com.dreamstartlabs.dreamlink.identity.service;
 import com.dreamstartlabs.dreamlink.identity.client.KeycloakClient;
 import com.dreamstartlabs.dreamlink.identity.client.OneLoginClient;
 import com.dreamstartlabs.dreamlink.identity.config.SyncConfig;
+import com.dreamstartlabs.dreamlink.identity.model.KeycloakUser;
 import com.dreamstartlabs.dreamlink.identity.model.OneLoginEvent;
 import com.dreamstartlabs.dreamlink.identity.model.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.state.StateManager;
@@ -120,7 +121,7 @@ public class SyncService {
                         olUser.getId(), olUser.getUsername(), olUser.getEmail(), olUser.getFirstName(), olUser.getLastName(),
                         olUser.getStatus(), olUser.getState(), olUser.getCustomAttributes());
 
-                KeycloakClient.KeycloakUser kcUser = keycloakClient.findUser(olUser);
+                KeycloakUser kcUser = keycloakClient.findUser(olUser);
                 if (kcUser == null) {
                     keycloakClient.createUser(olUser);
                     createdCount++;
@@ -197,7 +198,7 @@ public class SyncService {
                         olUser.getId(), olUser.getUsername(), olUser.getEmail(), olUser.getFirstName(), olUser.getLastName(),
                         olUser.getStatus(), olUser.getState(), olUser.getCustomAttributes());
 
-                KeycloakClient.KeycloakUser kcUser = keycloakClient.findUser(olUser);
+                KeycloakUser kcUser = keycloakClient.findUser(olUser);
                 if (kcUser == null) {
                     keycloakClient.createUser(olUser);
                     createdCount++;
@@ -224,7 +225,7 @@ public class SyncService {
                 // Remove from local backup map
                 userMap.remove(event.getUserId());
 
-                KeycloakClient.KeycloakUser kcUser = keycloakClient.findUserByOneLoginId(event.getUserId());
+                KeycloakUser kcUser = keycloakClient.findUserByOneLoginId(event.getUserId());
                 if (kcUser != null) {
                     if (syncConfig.isDeleteKeycloakUsers()) {
                         keycloakClient.deleteUser(kcUser.getId());
@@ -253,7 +254,7 @@ public class SyncService {
     /**
      * Fallback to disable the user in Keycloak if deletion is disabled in configuration.
      */
-    private void olUserDeactivatedFallback(KeycloakClient.KeycloakUser kcUser, Long oneLoginId) {
+    private void olUserDeactivatedFallback(KeycloakUser kcUser, Long oneLoginId) {
         LOGGER.info("Deactivating user {} in Keycloak instead of deleting (OneLogin ID: {})", kcUser.getId(), oneLoginId);
         OneLoginUser dummyUser = new OneLoginUser();
         dummyUser.setId(oneLoginId);

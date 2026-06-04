@@ -1,9 +1,10 @@
 package com.dreamstartlabs.dreamlink.identity.client;
 
 import com.dreamstartlabs.dreamlink.identity.config.SyncConfig;
+import com.dreamstartlabs.dreamlink.identity.model.KeycloakUser;
 import com.dreamstartlabs.dreamlink.identity.model.OneLoginUser;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.dreamstartlabs.dreamlink.identity.response.TokenResponse;
+import com.dreamstartlabs.dreamlink.identity.utils.KeycloakUserMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -12,38 +13,60 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
+/**
+ * Keycloak Admin REST API client.
+ *
+ * <p>Responsibilities:
+ * <ul>
+ *   <li>Token lifecycle management (fetch + cache with 60 s safety margin)</li>
+ *   <li>CRUD operations on Keycloak users</li>
+ *   <li>Federated-identity linking</li>
+ * </ul>
+ *
+ * <p>Payload construction is delegated to {@link KeycloakUserMapper}.
+ */
 @Component
 public class KeycloakClient {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(KeycloakClient.class);
+    private static final int TOKEN_EXPIRY_BUFFER_SECONDS = 60;
+    private static final int DEFAULT_TOKEN_TTL_SECONDS   = 300;
 
     private final SyncConfig.KeycloakProps keycloakProps;
+    private final KeycloakUserMapper        userMapper;
     private final RestClient restClient;
 
-    private String accessToken;
+    private String  accessToken;
     private Instant tokenExpiration;
 
-    public KeycloakClient(SyncConfig.KeycloakProps keycloakProps) {
+    public KeycloakClient(SyncConfig.KeycloakProps keycloakProps, KeycloakUserMapper userMapper) {
         this.keycloakProps = keycloakProps;
-        this.restClient = RestClient.builder()
+        this.userMapper    = userMapper;
+        this.restClient    = RestClient.builder()
                 .baseUrl(keycloakProps.getApiUrl())
                 .build();
     }
 
-    /**
-     * Gets a valid Keycloak Admin access token.
-     */
+    // =========================================================================
+    // Token management
+    // =========================================================================
+
+    /** Returns a cached, valid admin access token — refreshes automatically. */
     private synchronized String getAccessToken() {
-        if (accessToken == null || tokenExpiration == null || Instant.now().isAfter(tokenExpiration.minusSeconds(60))) {
+        boolean needsRefresh = accessToken == null
+                               || tokenExpiration == null
+                               || Instant.now().isAfter(tokenExpiration.minusSeconds(TOKEN_EXPIRY_BUFFER_SECONDS));
+
+        if (needsRefresh) {
             fetchToken();
         }
         return accessToken;
@@ -51,269 +74,178 @@ public class KeycloakClient {
 
     private void fetchToken() {
         LOGGER.info("Requesting new Keycloak admin access token...");
-        String realm = keycloakProps.getRealm();
-        String clientId = keycloakProps.getClientId();
-        String clientSecret = keycloakProps.getClientSecret();
 
         MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("grant_type", "client_credentials");
-        body.add("client_id", clientId);
-        body.add("client_secret", clientSecret);
+        body.add("grant_type",    "client_credentials");
+        body.add("client_id",     keycloakProps.getClientId());
+        body.add("client_secret", keycloakProps.getClientSecret());
 
         try {
             TokenResponse response = restClient.post()
-                    .uri("/realms/" + realm + "/protocol/openid-connect/token")
+                    .uri("/realms/{realm}/protocol/openid-connect/token", keycloakProps.getRealm())
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(body)
                     .retrieve()
                     .body(TokenResponse.class);
 
-            if (response != null && response.getAccessToken() != null) {
-                this.accessToken = response.getAccessToken();
-                long expiresIn = response.getExpiresIn() != null ? response.getExpiresIn() : 300;
-                this.tokenExpiration = Instant.now().plusSeconds(expiresIn);
-                LOGGER.info("Successfully acquired Keycloak admin access token. Expires in {} seconds.", expiresIn);
-            } else {
-                throw new RuntimeException("Invalid token response from Keycloak");
+            if (response == null || response.accessToken() == null) {
+                throw new IllegalStateException("Token response was empty or missing access_token");
             }
+
+            long expiresIn   = Optional.ofNullable(response.expiresIn()).orElse((long) DEFAULT_TOKEN_TTL_SECONDS);
+            this.accessToken      = response.accessToken();
+            this.tokenExpiration  = Instant.now().plusSeconds(expiresIn);
+            LOGGER.info("Keycloak admin token acquired. Expires in {} s.", expiresIn);
+
         } catch (Exception e) {
             LOGGER.error("Failed to fetch Keycloak admin access token: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to authenticate with Keycloak: " + e.getMessage(), e);
+            throw new RuntimeException("Keycloak authentication failed: " + e.getMessage(), e);
         }
     }
 
+    // =========================================================================
+    // User lookups
+    // =========================================================================
+
     /**
-     * Searches for a user in Keycloak.
-     * First attempts to query by the custom 'onelogin_id' attribute using the 'q'
-     * parameter.
-     * If not found, falls back to querying by username.
+     * Searches for a Keycloak user that corresponds to the given OneLogin user.
+     *
+     * <p>Strategy (first match wins):
+     * <ol>
+     *   <li>Custom attribute {@code onelogin_id}</li>
+     *   <li>Exact username match</li>
+     *   <li>Exact e-mail match</li>
+     * </ol>
+     *
+     * @return the fully-hydrated {@link KeycloakUser}, or {@code null} if not found.
      */
     public KeycloakUser findUser(OneLoginUser oneLoginUser) {
         String realm = keycloakProps.getRealm();
-        String token = getAccessToken();
 
-        // 1. Search by custom attribute
-        try {
-            LOGGER.debug("Searching Keycloak user by attribute 'onelogin_id': {}", oneLoginUser.getId());
-            List<KeycloakUser> users = restClient.get()
-                    .uri("/admin/realms/" + realm + "/users?q=onelogin_id:" + oneLoginUser.getId())
-                    .header("Authorization", "Bearer " + token)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<List<KeycloakUser>>() {
-                    });
-
-            LOGGER.debug("Keycloak search by attribute result: {}", users);
-            if (users != null && !users.isEmpty()) {
-                LOGGER.debug("Found Keycloak user by onelogin_id: {}", oneLoginUser.getId());
-                return getUserById(users.get(0).getId());
-            }
-        } catch (Exception e) {
-            LOGGER.warn(
-                    "Failed to search user by attribute 'onelogin_id' via q parameter: {}. Falling back to username search.",
-                    e.getMessage());
-        }
-
-        // 2. Fallback: Search by username
-        try {
-            LOGGER.debug("Searching Keycloak user by username: {}", oneLoginUser.getUsername());
-            List<KeycloakUser> users = restClient.get()
-                    .uri("/admin/realms/" + realm + "/users?username=" + oneLoginUser.getUsername() + "&exact=true")
-                    .header("Authorization", "Bearer " + token)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<List<KeycloakUser>>() {
-                    });
-
-            LOGGER.debug("Keycloak search by username result: {}", users);
-            if (users != null && !users.isEmpty()) {
-                LOGGER.debug("Found Keycloak user by username: {}", oneLoginUser.getUsername());
-                return getUserById(users.get(0).getId());
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to search user by username: {}", e.getMessage(), e);
-        }
-
-        // 3. Fallback: Search by email
-        try {
-            LOGGER.debug("Searching Keycloak user by email: {}", oneLoginUser.getEmail());
-            List<KeycloakUser> users = restClient.get()
-                    .uri("/admin/realms/" + realm + "/users?email=" + oneLoginUser.getEmail() + "&exact=true")
-                    .header("Authorization", "Bearer " + token)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<List<KeycloakUser>>() {
-                    });
-
-            LOGGER.debug("Keycloak search by email result: {}", users);
-            if (users != null && !users.isEmpty()) {
-                LOGGER.debug("Found Keycloak user by email: {}", oneLoginUser.getEmail());
-                return getUserById(users.get(0).getId());
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to search user by email: {}", e.getMessage(), e);
-        }
-
-        return null;
+        return searchByAttribute(realm, "onelogin_id", String.valueOf(oneLoginUser.getId()))
+                .or(() -> searchByParam(realm, "username", oneLoginUser.getUsername()))
+                .or(() -> searchByParam(realm, "email",    oneLoginUser.getEmail()))
+                .map(u -> getUserById(u.getId()))
+                .orElse(null);
     }
 
     /**
-     * Finds a user directly by their OneLogin ID attribute.
+     * Finds a Keycloak user by their stored {@code onelogin_id} attribute.
+     *
+     * @return the fully-hydrated {@link KeycloakUser}, or {@code null} if not found.
      */
     public KeycloakUser findUserByOneLoginId(Long oneLoginId) {
         String realm = keycloakProps.getRealm();
-        String token = getAccessToken();
-
-        try {
-            LOGGER.debug("Searching Keycloak user by direct onelogin_id: {}", oneLoginId);
-            List<KeycloakUser> users = restClient.get()
-                    .uri("/admin/realms/" + realm + "/users?q=onelogin_id:" + oneLoginId)
-                    .header("Authorization", "Bearer " + token)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<List<KeycloakUser>>() {
-                    });
-
-            LOGGER.debug("Keycloak direct onelogin_id search result: {}", users);
-            if (users != null && !users.isEmpty()) {
-                return getUserById(users.get(0).getId());
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to find Keycloak user by onelogin_id {}: {}", oneLoginId, e.getMessage());
-        }
-        return null;
+        return searchByAttribute(realm, "onelogin_id", String.valueOf(oneLoginId))
+                .map(u -> getUserById(u.getId()))
+                .orElse(null);
     }
 
     /**
-     * Fetches a full user representation by their Keycloak ID.
-     * This is necessary because user lists from search endpoints do not return user
-     * attributes.
+     * Fetches the full user representation by Keycloak ID.
+     * User-list endpoints omit attributes, so this is always needed after a search.
+     *
+     * @return the {@link KeycloakUser}, or {@code null} on failure.
      */
     public KeycloakUser getUserById(String userId) {
         String realm = keycloakProps.getRealm();
-        String token = getAccessToken();
-        try {
-            LOGGER.debug("Fetching full Keycloak user details for ID: {}", userId);
-            return restClient.get()
-                    .uri("/admin/realms/" + realm + "/users/" + userId)
-                    .header("Authorization", "Bearer " + token)
-                    .retrieve()
-                    .body(KeycloakUser.class);
-        } catch (Exception e) {
-            LOGGER.error("Failed to fetch full Keycloak user by ID {}: {}", userId, e.getMessage());
-            return null;
-        }
+        LOGGER.debug("Fetching full Keycloak user for ID: {}", userId);
+
+        return executeGet(
+                "/admin/realms/{realm}/users/{id}",
+                KeycloakUser.class,
+                "fetch user by ID " + userId,
+                realm, userId
+        ).orElse(null);
     }
 
+    // =========================================================================
+    // User mutations
+    // =========================================================================
+
     /**
-     * Creates a user in Keycloak and links their federated identity.
+     * Creates a new user in Keycloak and immediately links their OneLogin federated identity.
      */
     public void createUser(OneLoginUser oneLoginUser) {
         String realm = keycloakProps.getRealm();
-        String token = getAccessToken();
+        LOGGER.info("Creating Keycloak user: username={}, email={}", oneLoginUser.getUsername(), oneLoginUser.getEmail());
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("username", oneLoginUser.getUsername());
-        body.put("email", oneLoginUser.getEmail());
-        body.put("firstName", oneLoginUser.getFirstName());
-        body.put("lastName", oneLoginUser.getLastName());
-        body.put("enabled", isUserEnabled(oneLoginUser.getStatus()));
-        body.put("emailVerified", true);
-
-        // Store user attributes (onelogin_id, tenant, role_ids)
-        body.put("attributes", buildUserAttributes(oneLoginUser));
+        Map<String, Object> body = userMapper.toKeycloakPayload(oneLoginUser);
+        LOGGER.debug("Create user payload: {}", body);
 
         try {
-            LOGGER.info("Creating user in Keycloak: username={}, email={}", oneLoginUser.getUsername(),
-                    oneLoginUser.getEmail());
-            LOGGER.debug("Create Keycloak user request payload: {}", body);
             ResponseEntity<Void> response = restClient.post()
-                    .uri("/admin/realms/" + realm + "/users")
-                    .header("Authorization", "Bearer " + token)
+                    .uri("/admin/realms/{realm}/users", realm)
+                    .header("Authorization", bearerToken())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
                     .toBodilessEntity();
 
             if (response.getStatusCode().value() == 201) {
-                URI location = response.getHeaders().getLocation();
-                if (location != null) {
-                    String path = location.getPath();
-                    String keycloakUserId = path.substring(path.lastIndexOf('/') + 1);
-                    LOGGER.info("User created successfully in Keycloak with ID: {}", keycloakUserId);
-
-                    // Create federated identity link
-                    linkFederatedIdentity(keycloakUserId, oneLoginUser);
-                } else {
-                    LOGGER.warn(
-                            "User created in Keycloak, but Location header was missing. Cannot link federated identity immediately.");
-                }
+                extractIdFromLocation(response)
+                        .ifPresentOrElse(
+                                id -> linkFederatedIdentity(id, oneLoginUser),
+                                () -> LOGGER.warn("User created but Location header missing; cannot link federated identity.")
+                        );
             } else {
-                LOGGER.error("Failed to create Keycloak user: HTTP {}", response.getStatusCode());
+                LOGGER.error("Unexpected status {} creating Keycloak user '{}'",
+                        response.getStatusCode(), oneLoginUser.getUsername());
             }
         } catch (Exception e) {
-            LOGGER.error("Error creating Keycloak user: {}", e.getMessage(), e);
+            LOGGER.error("Error creating Keycloak user '{}': {}", oneLoginUser.getUsername(), e.getMessage(), e);
         }
     }
 
     /**
-     * Links the Keycloak user to their OneLogin Identity Provider identity.
+     * Links an existing Keycloak user to their OneLogin Identity Provider identity.
+     * Safe to call when the link already exists (409 is silently swallowed).
      */
     public void linkFederatedIdentity(String keycloakUserId, OneLoginUser oneLoginUser) {
-        String realm = keycloakProps.getRealm();
-        String idpAlias = keycloakProps.getIdpAlias();
-        String token = getAccessToken();
+        String realm     = keycloakProps.getRealm();
+        String idpAlias  = keycloakProps.getIdpAlias();
 
-        Map<String, String> body = new HashMap<>();
-        body.put("identityProvider", idpAlias);
-        body.put("userId", String.valueOf(oneLoginUser.getId()));
-        body.put("userName", oneLoginUser.getUsername()); // Or email depending on IDP configuration
+        Map<String, String> body = userMapper.toFederatedIdentityPayload(oneLoginUser, idpAlias);
+        LOGGER.info("Linking user {} to IDP '{}' (OneLogin ID: {})", keycloakUserId, idpAlias, oneLoginUser.getId());
+        LOGGER.debug("Federated identity payload: {}", body);
 
         try {
-            LOGGER.info("Linking user {} to Identity Provider '{}' (IDP UserId: {})", keycloakUserId, idpAlias,
-                    oneLoginUser.getId());
-            LOGGER.debug("Link federated identity request payload: {}", body);
             restClient.post()
-                    .uri("/admin/realms/" + realm + "/users/" + keycloakUserId + "/federated-identity/" + idpAlias)
-                    .header("Authorization", "Bearer " + token)
+                    .uri("/admin/realms/{realm}/users/{id}/federated-identity/{idp}", realm, keycloakUserId, idpAlias)
+                    .header("Authorization", bearerToken())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
                     .toBodilessEntity();
-            LOGGER.info("Successfully linked federated identity for user: {}", keycloakUserId);
-        } catch (org.springframework.web.client.HttpClientErrorException.Conflict e) {
-            LOGGER.info("User {} is already linked to Identity Provider '{}'.", keycloakUserId, idpAlias);
+            LOGGER.info("Federated identity linked for user {}.", keycloakUserId);
+        } catch (HttpClientErrorException.Conflict e) {
+            LOGGER.info("User {} is already linked to IDP '{}' — skipping.", keycloakUserId, idpAlias);
         } catch (Exception e) {
             LOGGER.error("Failed to link federated identity for user {}: {}", keycloakUserId, e.getMessage(), e);
         }
     }
 
     /**
-     * Updates an existing Keycloak user with values from OneLogin.
+     * Updates an existing Keycloak user's attributes from OneLogin data.
      */
     public void updateUser(String keycloakUserId, OneLoginUser oneLoginUser) {
         String realm = keycloakProps.getRealm();
-        String token = getAccessToken();
+        LOGGER.info("Updating Keycloak user {}: username={}", keycloakUserId, oneLoginUser.getUsername());
 
-        Map<String, Object> body = new HashMap<>();
-        body.put("username", oneLoginUser.getUsername());
-        body.put("email", oneLoginUser.getEmail());
-        body.put("firstName", oneLoginUser.getFirstName());
-        body.put("lastName", oneLoginUser.getLastName());
-        body.put("enabled", isUserEnabled(oneLoginUser.getStatus()));
-
-        // Keep attributes updated (onelogin_id, tenant, role_ids)
-        body.put("attributes", buildUserAttributes(oneLoginUser));
+        Map<String, Object> body = userMapper.toKeycloakPayload(oneLoginUser);
+        LOGGER.debug("Update user payload: {}", body);
 
         try {
-            LOGGER.info("Updating user {} in Keycloak: username={}", keycloakUserId, oneLoginUser.getUsername());
-            LOGGER.debug("Update Keycloak user request payload: {}", body);
             restClient.put()
-                    .uri("/admin/realms/" + realm + "/users/" + keycloakUserId)
-                    .header("Authorization", "Bearer " + token)
+                    .uri("/admin/realms/{realm}/users/{id}", realm, keycloakUserId)
+                    .header("Authorization", bearerToken())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
                     .toBodilessEntity();
-            LOGGER.info("User {} updated successfully in Keycloak", keycloakUserId);
+            LOGGER.info("Keycloak user {} updated.", keycloakUserId);
         } catch (Exception e) {
-            LOGGER.error("Failed to update user {}: {}", keycloakUserId, e.getMessage(), e);
+            LOGGER.error("Failed to update Keycloak user {}: {}", keycloakUserId, e.getMessage(), e);
         }
     }
 
@@ -322,143 +254,101 @@ public class KeycloakClient {
      */
     public void deleteUser(String keycloakUserId) {
         String realm = keycloakProps.getRealm();
-        String token = getAccessToken();
+        LOGGER.info("Deleting Keycloak user {}...", keycloakUserId);
 
         try {
-            LOGGER.info("Deleting user {} from Keycloak...", keycloakUserId);
             restClient.delete()
-                    .uri("/admin/realms/" + realm + "/users/" + keycloakUserId)
-                    .header("Authorization", "Bearer " + token)
+                    .uri("/admin/realms/{realm}/users/{id}", realm, keycloakUserId)
+                    .header("Authorization", bearerToken())
                     .retrieve()
                     .toBodilessEntity();
-            LOGGER.info("User {} deleted successfully from Keycloak", keycloakUserId);
+            LOGGER.info("Keycloak user {} deleted.", keycloakUserId);
         } catch (Exception e) {
-            LOGGER.error("Failed to delete user {}: {}", keycloakUserId, e.getMessage(), e);
+            LOGGER.error("Failed to delete Keycloak user {}: {}", keycloakUserId, e.getMessage(), e);
+        }
+    }
+
+    // =========================================================================
+    // Private helpers
+    // =========================================================================
+
+    /** Produces the Authorization header value from the current token. */
+    private String bearerToken() {
+        return "Bearer " + getAccessToken();
+    }
+
+    /**
+     * Generic GET helper — handles logging and exception wrapping in one place.
+     */
+    private <T> Optional<T> executeGet(String uriTemplate, Class<T> responseType, String operationLabel, Object... uriVars) {
+        try {
+            T result = restClient.get()
+                    .uri(uriTemplate, uriVars)
+                    .header("Authorization", bearerToken())
+                    .retrieve()
+                    .body(responseType);
+            return Optional.ofNullable(result);
+        } catch (Exception e) {
+            LOGGER.error("Failed to {}: {}", operationLabel, e.getMessage(), e);
+            return Optional.empty();
         }
     }
 
     /**
-     * Helper to construct Keycloak user attributes mapping.
+     * Searches for users via Keycloak's {@code ?q=attribute:value} filter.
+     * Returns an {@link Optional} holding the first result's partial representation
+     * (attributes are absent — always follow up with {@link #getUserById}).
      */
-    private Map<String, List<String>> buildUserAttributes(OneLoginUser oneLoginUser) {
-        Map<String, List<String>> attributes = new HashMap<>();
-        attributes.put("onelogin_id", Collections.singletonList(String.valueOf(oneLoginUser.getId())));
+    private Optional<KeycloakUser> searchByAttribute(String realm, String attrName, String attrValue) {
+        LOGGER.debug("Searching Keycloak users by attribute {}={}", attrName, attrValue);
+        try {
+            List<KeycloakUser> users = restClient.get()
+                    .uri("/admin/realms/{realm}/users?q={attr}:{val}", realm, attrName, attrValue)
+                    .header("Authorization", bearerToken())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {});
 
-        // Add tenant from custom_attributes if present
-        if (oneLoginUser.getCustomAttributes() != null && oneLoginUser.getCustomAttributes().containsKey("tenant")) {
-            Object tenantVal = oneLoginUser.getCustomAttributes().get("tenant");
-            if (tenantVal != null) {
-                attributes.put("tenant", Collections.singletonList(String.valueOf(tenantVal)));
-            }
+            LOGGER.debug("Attribute search ({}={}) returned {} result(s).", attrName, attrValue,
+                    users == null ? 0 : users.size());
+            return firstOf(users);
+        } catch (Exception e) {
+            LOGGER.warn("Attribute search ({}={}) failed: {} — will try next strategy.", attrName, attrValue, e.getMessage());
+            return Optional.empty();
         }
-
-        // Add role_ids if present
-        if (oneLoginUser.getRoleIds() != null && !oneLoginUser.getRoleIds().isEmpty()) {
-            List<String> roleIds = oneLoginUser.getRoleIds().stream()
-                    .map(String::valueOf)
-                    .toList();
-            attributes.put("role_ids", roleIds);
-        }
-
-        return attributes;
     }
 
     /**
-     * Maps OneLogin user status to active/inactive (enabled) state in Keycloak.
-     * Status: 1 = Active (all other operational values except 2, 3 represent active
-     * for Keycloak login)
-     * Status: 2 = Suspended, 3 = Locked should disable the user.
+     * Searches for users by a simple query parameter (e.g. {@code username}, {@code email})
+     * using Keycloak's {@code &exact=true} flag.
      */
-    private boolean isUserEnabled(Integer status) {
-        if (status == null) {
-            return true;
-        }
-        return status != 2 && status != 3;
-    }
+    private Optional<KeycloakUser> searchByParam(String realm, String paramName, String paramValue) {
+        LOGGER.debug("Searching Keycloak users by {}={}", paramName, paramValue);
+        try {
+            List<KeycloakUser> users = restClient.get()
+                    .uri("/admin/realms/{realm}/users?{param}={val}&exact=true", realm, paramName, paramValue)
+                    .header("Authorization", bearerToken())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {});
 
-    // Helper class for mapping OAuth token response
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class TokenResponse {
-        @JsonProperty("access_token")
-        private String accessToken;
-
-        @JsonProperty("expires_in")
-        private Long expiresIn;
-
-        public String getAccessToken() {
-            return accessToken;
-        }
-
-        public void setAccessToken(String accessToken) {
-            this.accessToken = accessToken;
-        }
-
-        public Long getExpiresIn() {
-            return expiresIn;
-        }
-
-        public void setExpiresIn(Long expiresIn) {
-            this.expiresIn = expiresIn;
+            LOGGER.debug("Param search ({}={}) returned {} result(s).", paramName, paramValue,
+                    users == null ? 0 : users.size());
+            return firstOf(users);
+        } catch (Exception e) {
+            LOGGER.error("Param search ({}={}) failed: {}", paramName, paramValue, e.getMessage(), e);
+            return Optional.empty();
         }
     }
 
-    // Representation of a Keycloak user searched from endpoints
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class KeycloakUser {
-        private String id;
-        private String username;
-        private String email;
-        private boolean enabled;
-        private Map<String, List<String>> attributes;
+    /** Returns an Optional of the first element, or empty if the list is null/empty. */
+    private static <T> Optional<T> firstOf(List<T> list) {
+        return (list != null && !list.isEmpty()) ? Optional.of(list.get(0)) : Optional.empty();
+    }
 
-        public String getId() {
-            return id;
-        }
-
-        public void setId(String id) {
-            this.id = id;
-        }
-
-        public String getUsername() {
-            return username;
-        }
-
-        public void setUsername(String username) {
-            this.username = username;
-        }
-
-        public String getEmail() {
-            return email;
-        }
-
-        public void setEmail(String email) {
-            this.email = email;
-        }
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-
-        public Map<String, List<String>> getAttributes() {
-            return attributes;
-        }
-
-        public void setAttributes(Map<String, List<String>> attributes) {
-            this.attributes = attributes;
-        }
-
-        public String getOneLoginId() {
-            if (attributes != null && attributes.containsKey("onelogin_id")) {
-                List<String> values = attributes.get("onelogin_id");
-                if (values != null && !values.isEmpty()) {
-                    return values.get(0);
-                }
-            }
-            return null;
-        }
+    /** Extracts the newly-created Keycloak user ID from a 201 Location header. */
+    private static Optional<String> extractIdFromLocation(ResponseEntity<?> response) {
+        URI location = response.getHeaders().getLocation();
+        if (location == null) return Optional.empty();
+        String path = location.getPath();
+        return Optional.of(path.substring(path.lastIndexOf('/') + 1));
     }
 }
