@@ -1,0 +1,31 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: dsl-dreamlink-identity-backend
+
+# OneLogin Configuration
+onelogin:
+  api-url: ${ONELOGIN_API_URL}
+  client-id: ${ONELOGIN_CLIENT_ID}
+  client-secret: ${ONELOGIN_CLIENT_SECRET}
+
+# Keycloak Configuration
+keycloak:
+  api-url: ${KEYCLOAK_API_URL}
+  realm: ${KEYCLOAK_REALM}
+  client-id: ${KEYCLOAK_CLIENT_ID}
+  client-secret: ${KEYCLOAK_CLIENT_SECRET}
+  idp-alias: onelogin
+
+# Sync Settings
+sync:
+  cron: 0 */1 * * * *
+  state-file: sync-state.json
+  delete-keycloak-users: false
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
