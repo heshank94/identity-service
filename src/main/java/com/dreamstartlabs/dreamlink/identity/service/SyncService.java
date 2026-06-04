@@ -4,8 +4,10 @@ package com.dreamstartlabs.dreamlink.identity.service;
 import com.dreamstartlabs.dreamlink.identity.client.KeycloakClient;
 import com.dreamstartlabs.dreamlink.identity.client.OneLoginClient;
 import com.dreamstartlabs.dreamlink.identity.config.SyncConfig;
+import com.dreamstartlabs.dreamlink.identity.model.KeycloakRole;
 import com.dreamstartlabs.dreamlink.identity.model.KeycloakUser;
 import com.dreamstartlabs.dreamlink.identity.model.OneLoginEvent;
+import com.dreamstartlabs.dreamlink.identity.model.OneLoginRole;
 import com.dreamstartlabs.dreamlink.identity.model.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.state.StateManager;
 import com.dreamstartlabs.dreamlink.identity.state.SyncState;
@@ -30,17 +32,20 @@ public class SyncService {
     private final KeycloakClient keycloakClient;
     private final StateManager stateManager;
     private final SyncConfig syncConfig;
+    private final RoleCache roleCache;
 
     private boolean isSyncRunning = false;
 
     public SyncService(OneLoginClient oneLoginClient,
                        KeycloakClient keycloakClient,
                        StateManager stateManager,
-                       SyncConfig syncConfig) {
+                       SyncConfig syncConfig,
+                       RoleCache roleCache) {
         this.oneLoginClient = oneLoginClient;
         this.keycloakClient = keycloakClient;
         this.stateManager = stateManager;
         this.syncConfig = syncConfig;
+        this.roleCache = roleCache;
     }
 
     /**
@@ -100,6 +105,9 @@ public class SyncService {
     private void executeInitialSync(SyncState state, Instant syncStartTime) {
         LOGGER.info("Starting initial bulk sync of all users from OneLogin...");
 
+        // Sync roles first
+        syncKeycloakRoles();
+
         // Fetch all users (no updatedSince filter) - these are summaries
         List<OneLoginUser> oneLoginSummaries = oneLoginClient.getUsers(null);
         List<OneLoginUser> fullUsers = new ArrayList<>();
@@ -133,6 +141,10 @@ public class SyncService {
                     }
                     updatedCount++;
                 }
+
+                // Sync user roles
+                syncUserRoles(kcUser != null ? kcUser.getId() : null, olUser);
+
             } catch (Exception e) {
                 LOGGER.error("Failed to sync user: ID={}, Username={}. Error: {}", summary.getId(), summary.getUsername(), e.getMessage());
             }
@@ -152,6 +164,9 @@ public class SyncService {
     private void executeIncrementalSync(SyncState state, Instant syncStartTime) {
         String lastSyncTime = state.getLastSyncTimestamp();
         LOGGER.info("Starting incremental sync. Fetching updates since: {}", lastSyncTime);
+
+        // Sync roles (in case new roles were added in OneLogin)
+        syncKeycloakRoles();
 
         // Load existing users backup
         List<OneLoginUser> existingUsers = stateManager.loadUsersBackup();
@@ -202,6 +217,7 @@ public class SyncService {
                 if (kcUser == null) {
                     keycloakClient.createUser(olUser);
                     createdCount++;
+                    kcUser = keycloakClient.findUser(olUser); // Fetch the created user to get their ID
                 } else {
                     boolean wasNotLinked = (kcUser.getOneLoginId() == null);
                     keycloakClient.updateUser(kcUser.getId(), olUser);
@@ -210,6 +226,12 @@ public class SyncService {
                     }
                     updatedCount++;
                 }
+
+                // Sync user roles
+                if (kcUser != null) {
+                    syncUserRoles(kcUser.getId(), olUser);
+                }
+
             } catch (Exception e) {
                 LOGGER.error("Failed to sync updated user: ID={}, Username={}. Error: {}", summary.getId(), summary.getUsername(), e.getMessage());
             }
@@ -263,5 +285,123 @@ public class SyncService {
         // Status 2 is Suspended (disabled)
         dummyUser.setStatus(2);
         keycloakClient.updateUser(kcUser.getId(), dummyUser);
+    }
+
+    /**
+     * Synchronizes all Keycloak roles from OneLogin role IDs.
+     * This method:
+     * 1. Fetches all roles from Keycloak
+     * 2. For each role, updates the roleCache with mappings
+     * 3. Stores role values in the state for tracking
+     */
+    private void syncKeycloakRoles() {
+        LOGGER.info("Starting to synchronize Keycloak roles...");
+        try {
+            List<KeycloakRole> kcRoles = keycloakClient.getAllRoles();
+            LOGGER.debug("Found {} roles in Keycloak.", kcRoles.size());
+
+            List<String> roleValues = new ArrayList<>();
+
+            for (KeycloakRole kcRole : kcRoles) {
+                if (kcRole.getName() != null) {
+                    roleValues.add(kcRole.getName());
+                    // Cache the Keycloak role mapping
+                    roleCache.cacheKeycloakRole(kcRole.getName(), kcRole.getId());
+                    LOGGER.debug("Cached Keycloak role: name={}, id={}", kcRole.getName(), kcRole.getId());
+                }
+            }
+
+            // Store role values in state for future reference
+            SyncState state = stateManager.loadState();
+            state.setRoleValues(roleValues);
+            stateManager.saveState(state);
+
+            LOGGER.info("Successfully synchronized {} Keycloak roles to cache.", roleValues.size());
+        } catch (Exception e) {
+            LOGGER.error("Failed to synchronize Keycloak roles: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Synchronizes user roles from OneLogin to Keycloak.
+     * This method:
+     * 1. Fetches the user's role IDs from OneLogin
+     * 2. Resolves each role ID to its name via the OneLogin API
+     * 3. Ensures the role exists in Keycloak (creates if necessary)
+     * 4. Assigns the role to the user in Keycloak
+     *
+     * @param keycloakUserId the Keycloak user ID
+     * @param oneLoginUser the OneLogin user object containing roleIds
+     */
+    private void syncUserRoles(String keycloakUserId, OneLoginUser oneLoginUser) {
+        if (keycloakUserId == null || oneLoginUser == null) {
+            LOGGER.debug("Cannot sync roles: keycloakUserId={}, oneLoginUser={}", keycloakUserId, oneLoginUser);
+            return;
+        }
+
+        if (oneLoginUser.getRoleIds() == null || oneLoginUser.getRoleIds().isEmpty()) {
+            LOGGER.debug("User {} (OneLogin ID: {}) has no roles assigned.", keycloakUserId, oneLoginUser.getId());
+            return;
+        }
+
+        LOGGER.debug("Syncing {} roles for user {} (OneLogin ID: {})",
+                oneLoginUser.getRoleIds().size(), keycloakUserId, oneLoginUser.getId());
+
+        List<String> assignedRoles = new ArrayList<>();
+
+        for (Long roleId : oneLoginUser.getRoleIds()) {
+            try {
+                // Step 1: Get or fetch the role name from OneLogin
+                String roleName = roleCache.getOneLoginRoleName(roleId);
+
+                if (roleName == null) {
+                    // Not in cache, fetch from OneLogin API
+                    OneLoginRole olRole = oneLoginClient.getRoleById(roleId);
+                    if (olRole == null) {
+                        LOGGER.warn("Could not fetch OneLogin role with ID {}. Skipping.", roleId);
+                        continue;
+                    }
+                    roleName = olRole.getName();
+                    // Cache it for future use
+                    roleCache.cacheOneLoginRole(roleId, roleName);
+                    LOGGER.debug("Fetched and cached OneLogin role: ID={}, Name={}", roleId, roleName);
+                }
+
+                if (roleName == null || roleName.isEmpty()) {
+                    LOGGER.warn("OneLogin role ID {} has no name. Skipping.", roleId);
+                    continue;
+                }
+
+                // Step 2: Ensure the role exists in Keycloak
+                KeycloakRole kcRole = keycloakClient.getRoleByName(roleName);
+                if (kcRole == null) {
+                    LOGGER.info("Role '{}' does not exist in Keycloak. Creating it...", roleName);
+                    kcRole = keycloakClient.createRole(roleName);
+                    if (kcRole == null) {
+                        LOGGER.warn("Failed to create role '{}' in Keycloak. Skipping assignment.", roleName);
+                        continue;
+                    }
+                    // Cache the newly created role
+                    roleCache.cacheKeycloakRole(roleName, kcRole.getId());
+                } else {
+                    // Ensure the role is cached
+                    roleCache.cacheKeycloakRole(roleName, kcRole.getId());
+                }
+
+                // Step 3: Assign the role to the user in Keycloak
+                boolean assigned = keycloakClient.assignRoleToUser(keycloakUserId, roleName);
+                if (assigned) {
+                    assignedRoles.add(roleName);
+                    LOGGER.debug("Successfully assigned role '{}' to user {}", roleName, keycloakUserId);
+                } else {
+                    LOGGER.warn("Failed to assign role '{}' to user {}", roleName, keycloakUserId);
+                }
+
+            } catch (Exception e) {
+                LOGGER.error("Error processing role ID {} for user {}: {}", roleId, keycloakUserId, e.getMessage(), e);
+            }
+        }
+
+        LOGGER.debug("User {} has been assigned {} roles: {}", keycloakUserId, assignedRoles.size(), assignedRoles);
     }
 }

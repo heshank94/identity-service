@@ -2,6 +2,7 @@ package com.dreamstartlabs.dreamlink.identity.client;
 
 import com.dreamstartlabs.dreamlink.identity.config.SyncConfig;
 import com.dreamstartlabs.dreamlink.identity.model.OneLoginEvent;
+import com.dreamstartlabs.dreamlink.identity.model.OneLoginRole;
 import com.dreamstartlabs.dreamlink.identity.model.OneLoginUser;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -148,6 +149,27 @@ public class OneLoginClient {
                     .body(OneLoginUser.class);
         } catch (Exception e) {
             LOGGER.error("Failed to fetch OneLogin user details for ID {}: {}", userId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Fetches a OneLogin role by its ID.
+     *
+     * @param roleId the OneLogin role ID
+     * @return the role if found, or null if not found
+     */
+    public OneLoginRole getRoleById(Long roleId) {
+        LOGGER.debug("Fetching OneLogin role details for ID: {}", roleId);
+        try {
+            String token = getAccessToken();
+            return restClient.get()
+                    .uri("/api/2/roles/" + roleId)
+                    .header("Authorization", "bearer " + token)
+                    .retrieve()
+                    .body(OneLoginRole.class);
+        } catch (Exception e) {
+            LOGGER.error("Failed to fetch OneLogin role details for ID {}: {}", roleId, e.getMessage());
             return null;
         }
     }
