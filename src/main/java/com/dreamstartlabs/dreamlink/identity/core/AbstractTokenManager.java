@@ -1,6 +1,6 @@
 package com.dreamstartlabs.dreamlink.identity.core;
 
-import com.dreamstartlabs.dreamlink.identity.old_response.TokenResponse;
+import com.dreamstartlabs.dreamlink.identity.models.response.TokenResponse;
 
 import java.time.Instant;
 

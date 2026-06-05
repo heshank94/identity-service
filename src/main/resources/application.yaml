@@ -21,7 +21,7 @@ keycloak:
 
 # Sync Settings
 sync:
-  cron: 0 */1 * * * *
+  fixedDelay: PT5M
   state-file: sync-state.json
   delete-keycloak-users: false
 

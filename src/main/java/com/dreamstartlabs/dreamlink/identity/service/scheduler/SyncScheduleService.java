@@ -1,19 +1,38 @@
 package com.dreamstartlabs.dreamlink.identity.service.scheduler;
 
+import com.dreamstartlabs.dreamlink.identity.service.orchestrator.OrchestratorService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+
+import static com.dreamstartlabs.dreamlink.identity.utils.TimeUtils.elapsedMillis;
+import static com.dreamstartlabs.dreamlink.identity.utils.TimeUtils.formatTimestamp;
+
 
 /**
  * @author Heshan Karunaratne
  */
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class SyncScheduleService {
 
-    @Scheduled(cron = "${sync.cron}")
+    private final OrchestratorService orchestratorService;
+
+    @Scheduled(fixedDelayString = "${sync.fixedDelay}")
     public void triggerSyncService() {
-        log.info("Triggering user synchronization process...");
-        //TODO: Implement the logic to trigger the synchronization process
+        Instant startTime = Instant.now();
+        log.info("SyncSchedulerService triggered at {}", formatTimestamp(startTime));
+
+        try {
+            orchestratorService.syncAll();
+            log.info("SyncSchedulerService completed successfully in {}ms", elapsedMillis(startTime));
+
+        } catch (Exception e) {
+            log.error("SyncSchedulerService failed after {}", elapsedMillis(startTime), e);
+        }
     }
 }
