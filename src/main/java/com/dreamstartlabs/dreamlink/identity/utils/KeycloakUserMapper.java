@@ -8,15 +8,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author Heshan Karunaratne
- */
 @Component
 public class KeycloakUserMapper {
 
-    /**
-     * Builds the full user-creation / user-update body for the Keycloak Admin API.
-     */
     public Map<String, Object> toKeycloakPayload(OneLoginUser user) {
         Map<String, Object> body = new HashMap<>();
         body.put("username", user.getUsername());
@@ -29,9 +23,6 @@ public class KeycloakUserMapper {
         return body;
     }
 
-    /**
-     * Builds the federated-identity link body.
-     */
     public Map<String, String> toFederatedIdentityPayload(OneLoginUser user, String idpAlias) {
         Map<String, String> body = new HashMap<>();
         body.put("identityProvider", idpAlias);
@@ -39,10 +30,6 @@ public class KeycloakUserMapper {
         body.put("userName", user.getUsername());
         return body;
     }
-
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
 
     private Map<String, List<String>> buildAttributes(OneLoginUser user) {
         Map<String, List<String>> attrs = new HashMap<>();
@@ -56,17 +43,9 @@ public class KeycloakUserMapper {
             }
         }
 
-        if (user.getRoleIds() != null && !user.getRoleIds().isEmpty()) {
-            attrs.put("role_ids", user.getRoleIds().stream().map(String::valueOf).toList());
-        }
-
         return attrs;
     }
 
-    /**
-     * Status 2 = Suspended, 3 = Locked → disabled in Keycloak.
-     * Null or anything else → enabled.
-     */
     private boolean isEnabled(Integer status) {
         if (status == null) return true;
         return status != 2 && status != 3;

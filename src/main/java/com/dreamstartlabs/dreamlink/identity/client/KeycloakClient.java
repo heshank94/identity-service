@@ -19,10 +19,7 @@ import org.springframework.web.client.RestClient;
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * Keycloak Admin REST API client.
@@ -234,10 +231,32 @@ public class KeycloakClient {
         String realm = keycloakProps.getRealm();
         LOGGER.info("Updating Keycloak user {}: username={}", keycloakUserId, oneLoginUser.getUsername());
 
-        Map<String, Object> body = userMapper.toKeycloakPayload(oneLoginUser);
-        LOGGER.debug("Update user payload: {}", body);
-
         try {
+            // 1. Fetch existing user (to preserve attributes like dreamlink_roles)
+            KeycloakUser existingUser = getUserById(keycloakUserId);
+
+            // 2. Build new payload from mapper
+            Map<String, Object> body = userMapper.toKeycloakPayload(oneLoginUser);
+
+            // 3. Merge attributes (CRITICAL FIX)
+            Map<String, List<String>> mergedAttributes = new HashMap<>();
+
+            if (existingUser != null && existingUser.getAttributes() != null) {
+                mergedAttributes.putAll(existingUser.getAttributes());
+            }
+
+            Map<String, List<String>> newAttributes =
+                    (Map<String, List<String>>) body.get("attributes");
+
+            if (newAttributes != null) {
+                mergedAttributes.putAll(newAttributes); // overwrite only mapper fields
+            }
+
+            body.put("attributes", mergedAttributes);
+
+            LOGGER.debug("Update user payload (merged): {}", body);
+
+            // 4. Send update request
             restClient.put()
                     .uri("/admin/realms/{realm}/users/{id}", realm, keycloakUserId)
                     .header("Authorization", bearerToken())
@@ -245,7 +264,9 @@ public class KeycloakClient {
                     .body(body)
                     .retrieve()
                     .toBodilessEntity();
+
             LOGGER.info("Keycloak user {} updated.", keycloakUserId);
+
         } catch (Exception e) {
             LOGGER.error("Failed to update Keycloak user {}: {}", keycloakUserId, e.getMessage(), e);
         }
@@ -553,5 +574,53 @@ public class KeycloakClient {
         if (location == null) return Optional.empty();
         String path = location.getPath();
         return Optional.of(path.substring(path.lastIndexOf('/') + 1));
+    }
+
+    public boolean setUserRolesAttribute(String keycloakUserId, List<String> roleNames) {
+        String realm = keycloakProps.getRealm();
+        LOGGER.info("Setting dreamlink_roles for user {} -> {}", keycloakUserId, roleNames);
+
+        try {
+            if (roleNames == null || roleNames.isEmpty()) {
+                LOGGER.warn("No roles provided for user {}. Skipping attribute update.", keycloakUserId);
+                return false;
+            }
+
+            // 1. Fetch existing user (IMPORTANT: we need current attributes)
+            KeycloakUser user = getUserById(keycloakUserId);
+            if (user == null) {
+                LOGGER.warn("User {} not found in Keycloak.", keycloakUserId);
+                return false;
+            }
+
+            // 2. Get or initialize attributes
+            Map<String, List<String>> attributes =
+                    user.getAttributes() != null ? user.getAttributes() : new HashMap<>();
+
+            // 3. Set dreamlink_roles
+            attributes.put("dreamlink_roles", roleNames);
+
+            // 4. Build payload
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("attributes", attributes);
+
+            LOGGER.debug("Updating dreamlink_roles payload: {}", payload);
+
+            // 5. Send update request
+            restClient.put()
+                    .uri("/admin/realms/{realm}/users/{id}", realm, keycloakUserId)
+                    .header("Authorization", bearerToken())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .toBodilessEntity();
+
+            LOGGER.info("Successfully updated dreamlink_roles for user {}", keycloakUserId);
+            return true;
+
+        } catch (Exception e) {
+            LOGGER.error("Failed to set dreamlink_roles for user {}: {}", keycloakUserId, e.getMessage(), e);
+            return false;
+        }
     }
 }

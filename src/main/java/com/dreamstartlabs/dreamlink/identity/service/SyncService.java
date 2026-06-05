@@ -14,6 +14,7 @@ import com.dreamstartlabs.dreamlink.identity.state.SyncState;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -402,6 +403,18 @@ public class SyncService {
             }
         }
 
+        // Set the dreamlink_roles user attribute for token claim mapping
+        if (!assignedRoles.isEmpty()) {
+            boolean attributeSet = keycloakClient.setUserRolesAttribute(keycloakUserId, assignedRoles);
+            if (attributeSet) {
+                LOGGER.info("Successfully set dreamlink_roles attribute for user {} with {} roles",
+                        keycloakUserId, assignedRoles.size());
+            } else {
+                LOGGER.warn("Failed to set dreamlink_roles attribute for user {}", keycloakUserId);
+            }
+        }
+
         LOGGER.debug("User {} has been assigned {} roles: {}", keycloakUserId, assignedRoles.size(), assignedRoles);
     }
+
 }
