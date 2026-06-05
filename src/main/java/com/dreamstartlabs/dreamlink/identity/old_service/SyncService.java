@@ -1,20 +1,19 @@
-package com.dreamstartlabs.dreamlink.identity.service;
+package com.dreamstartlabs.dreamlink.identity.old_service;
 
 
-import com.dreamstartlabs.dreamlink.identity.client.KeycloakClient;
-import com.dreamstartlabs.dreamlink.identity.client.OneLoginClient;
-import com.dreamstartlabs.dreamlink.identity.config.SyncConfig;
-import com.dreamstartlabs.dreamlink.identity.model.KeycloakRole;
-import com.dreamstartlabs.dreamlink.identity.model.KeycloakUser;
-import com.dreamstartlabs.dreamlink.identity.model.OneLoginEvent;
-import com.dreamstartlabs.dreamlink.identity.model.OneLoginRole;
-import com.dreamstartlabs.dreamlink.identity.model.OneLoginUser;
-import com.dreamstartlabs.dreamlink.identity.state.StateManager;
-import com.dreamstartlabs.dreamlink.identity.state.SyncState;
+import com.dreamstartlabs.dreamlink.identity.old_client.KeycloakClient;
+import com.dreamstartlabs.dreamlink.identity.old_client.OneLoginClient;
+import com.dreamstartlabs.dreamlink.identity.old_config.SyncConfig;
+import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakRole;
+import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
+import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
+import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
+import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.old_state.StateManager;
+import com.dreamstartlabs.dreamlink.identity.old_state.SyncState;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -49,20 +48,7 @@ public class SyncService {
         this.roleCache = roleCache;
     }
 
-    /**
-     * Optional: Run sync on startup to guarantee the initial sync runs immediately.
-     */
-    @PostConstruct
-    public void init() {
-        LOGGER.info("Application started. Triggering user synchronization immediately on startup...");
-        new Thread(this::triggerSync).start();
-    }
 
-    /**
-     * Scheduled synchronization execution.
-     * The cron expression is resolved from properties (default: every 5 minutes).
-     */
-    @Scheduled(cron = "${sync.cron:0 */5 * * * *}")
     public void scheduledSync() {
         LOGGER.info("Triggering scheduled user synchronization...");
         triggerSync();

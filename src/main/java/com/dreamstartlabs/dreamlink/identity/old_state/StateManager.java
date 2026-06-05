@@ -1,7 +1,7 @@
-package com.dreamstartlabs.dreamlink.identity.state;
+package com.dreamstartlabs.dreamlink.identity.old_state;
 
-import com.dreamstartlabs.dreamlink.identity.config.SyncConfig;
-import com.dreamstartlabs.dreamlink.identity.model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.old_config.SyncConfig;
+import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

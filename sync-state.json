@@ -1,5 +1,5 @@
 {
-  "lastSyncTimestamp" : "2026-06-04T18:53:42.821529100Z",
+  "lastSyncTimestamp" : "2026-06-05T15:34:50.379504900Z",
   "initialSyncCompleted" : true,
-  "roleValues" : [ ]
+  "roleValues" : [ "LoanOfficer", "admin", "System Manager", "default-roles-master", "create-realm", "Fast Product Manager", "Credit Supervisor", "FieldOfficer", "offline_access", "uma_authorization" ]
 }

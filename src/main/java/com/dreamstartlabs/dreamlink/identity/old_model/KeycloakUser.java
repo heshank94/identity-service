@@ -1,4 +1,4 @@
-package com.dreamstartlabs.dreamlink.identity.model;
+package com.dreamstartlabs.dreamlink.identity.old_model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;

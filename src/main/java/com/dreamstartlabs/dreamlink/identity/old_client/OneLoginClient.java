@@ -1,9 +1,9 @@
-package com.dreamstartlabs.dreamlink.identity.client;
+package com.dreamstartlabs.dreamlink.identity.old_client;
 
-import com.dreamstartlabs.dreamlink.identity.config.SyncConfig;
-import com.dreamstartlabs.dreamlink.identity.model.OneLoginEvent;
-import com.dreamstartlabs.dreamlink.identity.model.OneLoginRole;
-import com.dreamstartlabs.dreamlink.identity.model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.old_config.SyncConfig;
+import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
+import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
+import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;

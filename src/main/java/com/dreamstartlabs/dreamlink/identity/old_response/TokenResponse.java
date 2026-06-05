@@ -1,4 +1,4 @@
-package com.dreamstartlabs.dreamlink.identity.response;
+package com.dreamstartlabs.dreamlink.identity.old_response;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;

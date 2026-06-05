@@ -1,4 +1,4 @@
-package com.dreamstartlabs.dreamlink.identity.config;
+package com.dreamstartlabs.dreamlink.identity.old_config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;

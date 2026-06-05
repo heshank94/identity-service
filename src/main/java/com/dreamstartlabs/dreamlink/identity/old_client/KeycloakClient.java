@@ -1,11 +1,11 @@
-package com.dreamstartlabs.dreamlink.identity.client;
+package com.dreamstartlabs.dreamlink.identity.old_client;
 
-import com.dreamstartlabs.dreamlink.identity.config.SyncConfig;
-import com.dreamstartlabs.dreamlink.identity.model.KeycloakRole;
-import com.dreamstartlabs.dreamlink.identity.model.KeycloakUser;
-import com.dreamstartlabs.dreamlink.identity.model.OneLoginUser;
-import com.dreamstartlabs.dreamlink.identity.response.TokenResponse;
-import com.dreamstartlabs.dreamlink.identity.utils.KeycloakUserMapper;
+import com.dreamstartlabs.dreamlink.identity.old_config.SyncConfig;
+import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakRole;
+import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
+import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.old_response.TokenResponse;
+import com.dreamstartlabs.dreamlink.identity.old_utils.KeycloakUserMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
