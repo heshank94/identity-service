@@ -1,5 +1,6 @@
 package com.dreamstartlabs.dreamlink.identity.old_client;
 
+import com.dreamstartlabs.dreamlink.identity.config.KeyCloakProps;
 import com.dreamstartlabs.dreamlink.identity.old_config.SyncConfig;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakRole;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
@@ -40,14 +41,14 @@ public class KeycloakClient {
     private static final int TOKEN_EXPIRY_BUFFER_SECONDS = 60;
     private static final int DEFAULT_TOKEN_TTL_SECONDS   = 300;
 
-    private final SyncConfig.KeycloakProps keycloakProps;
+    private final KeyCloakProps keycloakProps;
     private final KeycloakUserMapper        userMapper;
     private final RestClient restClient;
 
     private String  accessToken;
     private Instant tokenExpiration;
 
-    public KeycloakClient(SyncConfig.KeycloakProps keycloakProps, KeycloakUserMapper userMapper) {
+    public KeycloakClient(KeyCloakProps keycloakProps, KeycloakUserMapper userMapper) {
         this.keycloakProps = keycloakProps;
         this.userMapper    = userMapper;
         this.restClient    = RestClient.builder()

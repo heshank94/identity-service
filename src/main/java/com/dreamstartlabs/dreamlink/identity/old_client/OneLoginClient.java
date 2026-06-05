@@ -1,5 +1,6 @@
 package com.dreamstartlabs.dreamlink.identity.old_client;
 
+import com.dreamstartlabs.dreamlink.identity.config.OneLoginProps;
 import com.dreamstartlabs.dreamlink.identity.old_config.SyncConfig;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
@@ -26,13 +27,13 @@ public class OneLoginClient {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OneLoginClient.class);
 
-    private final SyncConfig.OneLoginProps oneLoginProps;
+    private final OneLoginProps oneLoginProps;
     private final RestClient restClient;
 
     private String accessToken;
     private Instant tokenExpiration;
 
-    public OneLoginClient(SyncConfig.OneLoginProps oneLoginProps) {
+    public OneLoginClient(OneLoginProps oneLoginProps) {
         this.oneLoginProps = oneLoginProps;
         this.restClient = RestClient.builder()
                 .baseUrl(oneLoginProps.getApiUrl())
