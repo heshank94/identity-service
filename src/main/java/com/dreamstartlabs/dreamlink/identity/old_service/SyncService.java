@@ -194,39 +194,6 @@ public class SyncService {
     }
 
     /**
-     * Synchronizes all Keycloak roles from OneLogin role IDs.
-     * This method:
-     * 1. Fetches all roles from Keycloak
-     * 2. For each role, updates the roleCache with mappings
-     * 3. Stores role values in the state for tracking
-     */
-    private void syncKeycloakRoles() {
-        LOGGER.info("Starting to synchronize Keycloak roles...");
-        try {
-            List<KeycloakRole> kcRoles = keycloakClient.getAllRoles();
-            LOGGER.debug("Found {} roles in Keycloak.", kcRoles.size());
-
-            List<String> roleValues = new ArrayList<>();
-
-            for (KeycloakRole kcRole : kcRoles) {
-                if (kcRole.getName() != null) {
-                    roleValues.add(kcRole.getName());
-                    LOGGER.debug("Cached Keycloak role: name={}, id={}", kcRole.getName(), kcRole.getId());
-                }
-            }
-
-            // Store role values in state for future reference
-            SyncState state = stateManagerUtil.loadState();
-            state.setRoleValues(roleValues);
-            stateManagerUtil.saveState(state);
-
-            LOGGER.info("Successfully synchronized {} Keycloak roles to cache.", roleValues.size());
-        } catch (Exception e) {
-            LOGGER.error("Failed to synchronize Keycloak roles: {}", e.getMessage(), e);
-        }
-    }
-
-    /**
      * Synchronizes user roles from OneLogin to Keycloak.
      * This method:
      * 1. Fetches the user's role IDs from OneLogin
