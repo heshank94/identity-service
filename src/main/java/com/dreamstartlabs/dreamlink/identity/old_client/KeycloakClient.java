@@ -2,7 +2,7 @@ package com.dreamstartlabs.dreamlink.identity.old_client;
 
 import com.dreamstartlabs.dreamlink.identity.config.KeyCloakProps;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.models.response.TokenResponse;
 import com.dreamstartlabs.dreamlink.identity.old_utils.KeycloakUserMapper;
 import org.slf4j.Logger;

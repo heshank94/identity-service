@@ -4,10 +4,9 @@ import com.dreamstartlabs.dreamlink.identity.config.SyncConfigProps;
 import com.dreamstartlabs.dreamlink.identity.core.client.onelogin.OneLoginClient;
 import com.dreamstartlabs.dreamlink.identity.models.dto.SyncState;
 import com.dreamstartlabs.dreamlink.identity.old_client.KeycloakClient;
-import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakRole;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.utils.StateManagerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,9 +59,9 @@ public class SyncService {
                 }
                 fullUsers.add(olUser);
 
-                LOGGER.debug("Fetched full user details: ID={}, Username={}, Email={}, Firstname={}, Lastname={}, Status={}, State={}, CustomAttributes={}",
+                LOGGER.debug("Fetched full user details: ID={}, Username={}, Email={}, Firstname={}, Lastname={}, Status={}, CustomAttributes={}",
                         olUser.getId(), olUser.getUsername(), olUser.getEmail(), olUser.getFirstName(), olUser.getLastName(),
-                        olUser.getStatus(), olUser.getState(), olUser.getCustomAttributes());
+                        olUser.getStatus(), olUser.getCustomAttributes());
 
                 KeycloakUser kcUser = keycloakClient.findUser(olUser);
                 if (kcUser == null) {
@@ -115,9 +114,9 @@ public class SyncService {
                 }
                 userMap.put(olUser.getId(), olUser); // Update in backup map
 
-                LOGGER.debug("Fetched full user details: ID={}, Username={}, Email={}, Firstname={}, Lastname={}, Status={}, State={}, CustomAttributes={}",
+                LOGGER.debug("Fetched full user details: ID={}, Username={}, Email={}, Firstname={}, Lastname={}, Status={}, CustomAttributes={}",
                         olUser.getId(), olUser.getUsername(), olUser.getEmail(), olUser.getFirstName(), olUser.getLastName(),
-                        olUser.getStatus(), olUser.getState(), olUser.getCustomAttributes());
+                        olUser.getStatus(), olUser.getCustomAttributes());
 
                 KeycloakUser kcUser = keycloakClient.findUser(olUser);
                 if (kcUser == null) {

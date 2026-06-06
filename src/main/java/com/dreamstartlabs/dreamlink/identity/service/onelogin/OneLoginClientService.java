@@ -8,7 +8,7 @@ import com.dreamstartlabs.dreamlink.identity.models.response.EventResponse;
 import com.dreamstartlabs.dreamlink.identity.models.response.TokenResponse;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;

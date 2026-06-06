@@ -1,7 +1,7 @@
 package com.dreamstartlabs.dreamlink.identity.utils;
 
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.service.onelogin.OneLoginClientService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

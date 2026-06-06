@@ -1,6 +1,6 @@
 package com.dreamstartlabs.dreamlink.identity.old_utils;
 
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;

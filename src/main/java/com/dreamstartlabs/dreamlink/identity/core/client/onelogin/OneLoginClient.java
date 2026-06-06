@@ -2,7 +2,7 @@ package com.dreamstartlabs.dreamlink.identity.core.client.onelogin;
 
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 
 import java.util.List;
 
