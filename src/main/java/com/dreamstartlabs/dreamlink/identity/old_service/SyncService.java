@@ -47,9 +47,6 @@ public class SyncService {
     private void executeInitialSync(SyncState state, Instant syncStartTime) {
         LOGGER.info("Starting initial bulk sync of all users from OneLogin...");
 
-        // Sync roles first
-        syncKeycloakRoles();
-
         // Fetch all users (no updatedSince filter) - these are summaries
         List<OneLoginUser> oneLoginSummaries = oneLoginClient.getUsers(null);
         List<OneLoginUser> fullUsers = new ArrayList<>();
@@ -106,10 +103,6 @@ public class SyncService {
     private void executeIncrementalSync(SyncState state, Instant syncStartTime) {
         String lastSyncTime = state.getLastSyncTimestamp();
         LOGGER.info("Starting incremental sync. Fetching updates since: {}", lastSyncTime);
-
-        // Sync roles (in case new roles were added in OneLogin)
-        syncKeycloakRoles();
-
 
         Map<Long, OneLoginUser> userMap = new HashMap<>();
         List<OneLoginUser> updatedSummaries = oneLoginClient.getUsers(lastSyncTime);
@@ -222,8 +215,6 @@ public class SyncService {
             for (KeycloakRole kcRole : kcRoles) {
                 if (kcRole.getName() != null) {
                     roleValues.add(kcRole.getName());
-                    // Cache the Keycloak role mapping
-                    roleCache.cacheKeycloakRole(kcRole.getName(), kcRole.getId());
                     LOGGER.debug("Cached Keycloak role: name={}, id={}", kcRole.getName(), kcRole.getId());
                 }
             }
@@ -298,11 +289,6 @@ public class SyncService {
                         LOGGER.warn("Failed to create role '{}' in Keycloak. Skipping assignment.", roleName);
                         continue;
                     }
-                    // Cache the newly created role
-                    roleCache.cacheKeycloakRole(roleName, kcRole.getId());
-                } else {
-                    // Ensure the role is cached
-                    roleCache.cacheKeycloakRole(roleName, kcRole.getId());
                 }
 
                 // Step 3: Assign the role to the user in Keycloak

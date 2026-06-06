@@ -28,7 +28,7 @@ public class SyncScheduleService {
         log.info("SyncSchedulerService triggered at {}", formatTimestamp(syncStartTime));
 
         try {
-            orchestratorService.syncAll(syncStartTime);
+            orchestratorService.syncAll();
             log.info("SyncSchedulerService completed successfully in {}ms", elapsedMillis(syncStartTime));
 
         } catch (Exception e) {

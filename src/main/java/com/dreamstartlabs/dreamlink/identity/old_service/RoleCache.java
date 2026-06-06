@@ -23,9 +23,6 @@ public class RoleCache {
     // OneLogin role ID -> OneLogin role name
     private final ConcurrentHashMap<Long, String> oneLoginIdToName = new ConcurrentHashMap<>();
 
-    // OneLogin role name -> Keycloak role ID
-    private final ConcurrentHashMap<String, String> keycloakRoleMap = new ConcurrentHashMap<>();
-
     /**
      * Caches an OneLogin role ID to name mapping.
      */
@@ -44,58 +41,7 @@ public class RoleCache {
         return oneLoginIdToName.get(roleId);
     }
 
-    /**
-     * Caches a Keycloak role mapping by OneLogin role name.
-     *
-     * @param oneLoginRoleName the OneLogin role name
-     * @param keycloakRoleId the Keycloak role ID
-     */
-    public void cacheKeycloakRole(String oneLoginRoleName, String keycloakRoleId) {
-        keycloakRoleMap.put(oneLoginRoleName, keycloakRoleId);
-        LOGGER.debug("Cached Keycloak role mapping: OneLogin name={}, Keycloak ID={}", oneLoginRoleName, keycloakRoleId);
-    }
 
-    /**
-     * Retrieves the Keycloak role ID for a given OneLogin role name from cache.
-     *
-     * @param oneLoginRoleName the OneLogin role name
-     * @return the Keycloak role ID, or null if not in cache
-     */
-    public String getKeycloakRoleId(String oneLoginRoleName) {
-        return keycloakRoleMap.get(oneLoginRoleName);
-    }
 
-    /**
-     * Check if a Keycloak role exists in the cache.
-     *
-     * @param oneLoginRoleName the OneLogin role name
-     * @return true if the role exists in cache, false otherwise
-     */
-    public boolean hasKeycloakRole(String oneLoginRoleName) {
-        return keycloakRoleMap.containsKey(oneLoginRoleName);
-    }
 
-    /**
-     * Clears all cached role mappings.
-     * Use with caution - typically only for testing.
-     */
-    public void clear() {
-        oneLoginIdToName.clear();
-        keycloakRoleMap.clear();
-        LOGGER.debug("Role cache cleared");
-    }
-
-    /**
-     * Returns the current size of the OneLogin role cache.
-     */
-    public int getOneLoginCacheSize() {
-        return oneLoginIdToName.size();
-    }
-
-    /**
-     * Returns the current size of the Keycloak role cache.
-     */
-    public int getKeycloakCacheSize() {
-        return keycloakRoleMap.size();
-    }
 }

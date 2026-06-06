@@ -17,5 +17,6 @@ import java.util.List;
 public class SyncState {
     private String lastSyncTimestamp;
     private boolean initialSyncCompleted;
+    //TODO - check below needed
     private List<String> roleValues;
 }
