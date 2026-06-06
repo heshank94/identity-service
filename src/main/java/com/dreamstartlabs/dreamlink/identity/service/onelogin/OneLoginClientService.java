@@ -23,6 +23,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.dreamstartlabs.dreamlink.identity.utils.Constants.AUTHORIZATION;
+
 /**
  * @author Heshan Karunaratne
  */
@@ -117,7 +119,7 @@ public class OneLoginClientService extends AbstractTokenManager implements OneLo
             return webClient
                     .get()
                     .uri(uri.toUriString())
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .retrieve()
                     .toEntity(new ParameterizedTypeReference<List<OneLoginUser>>() {
                     })
@@ -151,7 +153,7 @@ public class OneLoginClientService extends AbstractTokenManager implements OneLo
             return webClient
                     .get()
                     .uri("/api/2/users/{userId}", userId)
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .retrieve()
                     .bodyToMono(OneLoginUser.class)
                     .block();
@@ -168,7 +170,7 @@ public class OneLoginClientService extends AbstractTokenManager implements OneLo
             return webClient
                     .get()
                     .uri("/api/2/roles")
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<List<OneLoginRole>>() {
                     })
@@ -186,7 +188,7 @@ public class OneLoginClientService extends AbstractTokenManager implements OneLo
             return webClient
                     .get()
                     .uri("/api/2/roles/{roleId}", roleId)
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .retrieve()
                     .bodyToMono(OneLoginRole.class)
                     .block();
@@ -216,7 +218,7 @@ public class OneLoginClientService extends AbstractTokenManager implements OneLo
                 ResponseEntity<EventResponse> response = webClient
                         .get()
                         .uri(builder.toUriString())
-                        .header("Authorization", bearer())
+                        .header(AUTHORIZATION, bearer())
                         .retrieve()
                         .toEntity(EventResponse.class)
                         .block();
@@ -231,9 +233,9 @@ public class OneLoginClientService extends AbstractTokenManager implements OneLo
 
                 List<String> afterCursor = response.getHeaders().get("After-Cursor");
                 if (afterCursor != null && !afterCursor.isEmpty()
-                    && afterCursor.get(0) != null
-                    && !afterCursor.get(0).trim().isEmpty()) {
-                    cursor = afterCursor.get(0);
+                    && afterCursor.getFirst() != null
+                    && !afterCursor.getFirst().trim().isEmpty()) {
+                    cursor = afterCursor.getFirst();
                 } else {
                     hasMore = false;
                 }
