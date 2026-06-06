@@ -24,15 +24,15 @@ public class SyncScheduleService {
 
     @Scheduled(fixedDelayString = "${sync.fixedDelay}")
     public void triggerSyncService() {
-        Instant startTime = Instant.now();
-        log.info("SyncSchedulerService triggered at {}", formatTimestamp(startTime));
+        Instant syncStartTime = Instant.now();
+        log.info("SyncSchedulerService triggered at {}", formatTimestamp(syncStartTime));
 
         try {
-            orchestratorService.syncAll();
-            log.info("SyncSchedulerService completed successfully in {}ms", elapsedMillis(startTime));
+            orchestratorService.syncAll(syncStartTime);
+            log.info("SyncSchedulerService completed successfully in {}ms", elapsedMillis(syncStartTime));
 
         } catch (Exception e) {
-            log.error("SyncSchedulerService failed after {}", elapsedMillis(startTime), e);
+            log.error("SyncSchedulerService failed after {}", elapsedMillis(syncStartTime), e);
         }
     }
 }

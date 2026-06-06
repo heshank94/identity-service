@@ -2,9 +2,9 @@ package com.dreamstartlabs.dreamlink.identity.old_service;
 
 
 import com.dreamstartlabs.dreamlink.identity.config.SyncConfigProps;
+import com.dreamstartlabs.dreamlink.identity.core.client.onelogin.OneLoginClient;
 import com.dreamstartlabs.dreamlink.identity.models.dto.SyncState;
 import com.dreamstartlabs.dreamlink.identity.old_client.KeycloakClient;
-import com.dreamstartlabs.dreamlink.identity.old_client.OneLoginClient;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakRole;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
@@ -32,8 +32,6 @@ public class SyncService {
     private final SyncConfigProps syncConfig;
     private final RoleCache roleCache;
 
-    private boolean isSyncRunning = false;
-
     public SyncService(OneLoginClient oneLoginClient,
                        KeycloakClient keycloakClient,
                        StateManagerUtil stateManagerUtil,
@@ -46,47 +44,6 @@ public class SyncService {
         this.roleCache = roleCache;
     }
 
-
-    public void scheduledSync() {
-        LOGGER.info("Triggering scheduled user synchronization...");
-        triggerSync();
-    }
-
-    /**
-     * Executes the synchronization cycle.
-     */
-    public synchronized void triggerSync() {
-        if (isSyncRunning) {
-            LOGGER.warn("Sync execution is already running. Skipping this cycle.");
-            return;
-        }
-
-        isSyncRunning = true;
-        Instant syncStartTime = Instant.now();
-        LOGGER.info("User synchronization cycle started at {}", syncStartTime);
-
-        try {
-            SyncState state = stateManagerUtil.loadState();
-
-            if (!state.isInitialSyncCompleted()) {
-                executeInitialSync(state, syncStartTime);
-            } else {
-                executeIncrementalSync(state, syncStartTime);
-            }
-
-            LOGGER.info("User synchronization cycle completed successfully in {} ms.",
-                    Instant.now().toEpochMilli() - syncStartTime.toEpochMilli());
-        } catch (Exception e) {
-            LOGGER.error("User synchronization cycle failed: {}", e.getMessage(), e);
-            // We do NOT update the state file timestamp on failure, allowing the next run to retry
-        } finally {
-            isSyncRunning = false;
-        }
-    }
-
-    /**
-     * Performs a complete synchronization of all users from OneLogin to Keycloak.
-     */
     private void executeInitialSync(SyncState state, Instant syncStartTime) {
         LOGGER.info("Starting initial bulk sync of all users from OneLogin...");
 
