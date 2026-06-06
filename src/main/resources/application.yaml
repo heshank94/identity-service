@@ -7,13 +7,15 @@ spring:
 
 # OneLogin Configuration
 onelogin:
-  base.api-url: ${ONELOGIN_API_URL}
+  base:
+    api-url: ${ONELOGIN_API_URL}
   client-id: ${ONELOGIN_CLIENT_ID}
   client-secret: ${ONELOGIN_CLIENT_SECRET}
 
 # Keycloak Configuration
 keycloak:
-  base.api-url: ${KEYCLOAK_API_URL}
+  base:
+    api-url: ${KEYCLOAK_API_URL}
   realm: ${KEYCLOAK_REALM}
   client-id: ${KEYCLOAK_CLIENT_ID}
   client-secret: ${KEYCLOAK_CLIENT_SECRET}

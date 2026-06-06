@@ -1,7 +1,6 @@
 package com.dreamstartlabs.dreamlink.identity.old_client;
 
 import com.dreamstartlabs.dreamlink.identity.config.OneLoginProps;
-import com.dreamstartlabs.dreamlink.identity.old_config.SyncConfig;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;

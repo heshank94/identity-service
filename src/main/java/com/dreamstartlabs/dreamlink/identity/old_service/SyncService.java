@@ -1,20 +1,18 @@
 package com.dreamstartlabs.dreamlink.identity.old_service;
 
 
+import com.dreamstartlabs.dreamlink.identity.config.SyncConfigProps;
+import com.dreamstartlabs.dreamlink.identity.models.dto.SyncState;
 import com.dreamstartlabs.dreamlink.identity.old_client.KeycloakClient;
 import com.dreamstartlabs.dreamlink.identity.old_client.OneLoginClient;
-import com.dreamstartlabs.dreamlink.identity.old_config.SyncConfig;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakRole;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
-import com.dreamstartlabs.dreamlink.identity.old_state.StateManager;
-import com.dreamstartlabs.dreamlink.identity.old_state.SyncState;
-import jakarta.annotation.PostConstruct;
+import com.dreamstartlabs.dreamlink.identity.utils.StateManagerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -30,20 +28,20 @@ public class SyncService {
 
     private final OneLoginClient oneLoginClient;
     private final KeycloakClient keycloakClient;
-    private final StateManager stateManager;
-    private final SyncConfig syncConfig;
+    private final StateManagerUtil stateManagerUtil;
+    private final SyncConfigProps syncConfig;
     private final RoleCache roleCache;
 
     private boolean isSyncRunning = false;
 
     public SyncService(OneLoginClient oneLoginClient,
                        KeycloakClient keycloakClient,
-                       StateManager stateManager,
-                       SyncConfig syncConfig,
+                       StateManagerUtil stateManagerUtil,
+                       SyncConfigProps syncConfig,
                        RoleCache roleCache) {
         this.oneLoginClient = oneLoginClient;
         this.keycloakClient = keycloakClient;
-        this.stateManager = stateManager;
+        this.stateManagerUtil = stateManagerUtil;
         this.syncConfig = syncConfig;
         this.roleCache = roleCache;
     }
@@ -68,7 +66,7 @@ public class SyncService {
         LOGGER.info("User synchronization cycle started at {}", syncStartTime);
 
         try {
-            SyncState state = stateManager.loadState();
+            SyncState state = stateManagerUtil.loadState();
 
             if (!state.isInitialSyncCompleted()) {
                 executeInitialSync(state, syncStartTime);
@@ -142,7 +140,7 @@ public class SyncService {
         // Update state
         state.setInitialSyncCompleted(true);
         state.setLastSyncTimestamp(syncStartTime.toString());
-        stateManager.saveState(state);
+        stateManagerUtil.saveState(state);
     }
 
     /**
@@ -155,33 +153,8 @@ public class SyncService {
         // Sync roles (in case new roles were added in OneLogin)
         syncKeycloakRoles();
 
-        // Load existing users backup
-        List<OneLoginUser> existingUsers = stateManager.loadUsersBackup();
-        Map<Long, OneLoginUser> userMap = new HashMap<>();
-        if (existingUsers.isEmpty()) {
-            LOGGER.warn("Local users backup file (onelogin-users.json) is empty or missing. Rebuilding backup cache from OneLogin...");
-            List<OneLoginUser> allSummaries = oneLoginClient.getUsers(null);
-            for (OneLoginUser summary : allSummaries) {
-                try {
-                    OneLoginUser olUser = oneLoginClient.getUserById(summary.getId());
-                    if (olUser != null) {
-                        userMap.put(olUser.getId(), olUser);
-                        LOGGER.debug("Rebuilt backup cache for User: ID={}, Username={}, Email={}, Firstname={}, Lastname={}, Status={}, State={}, CustomAttributes={}",
-                                olUser.getId(), olUser.getUsername(), olUser.getEmail(), olUser.getFirstName(), olUser.getLastName(),
-                                olUser.getStatus(), olUser.getState(), olUser.getCustomAttributes());
-                    }
-                } catch (Exception e) {
-                    LOGGER.error("Failed to fetch full user details for ID={} while rebuilding backup: {}", summary.getId(), e.getMessage());
-                }
-            }
-            LOGGER.info("Successfully rebuilt backup cache with {} users.", userMap.size());
-        } else {
-            for (OneLoginUser u : existingUsers) {
-                userMap.put(u.getId(), u);
-            }
-        }
 
-        // 1. Fetch updated/new users (summaries)
+        Map<Long, OneLoginUser> userMap = new HashMap<>();
         List<OneLoginUser> updatedSummaries = oneLoginClient.getUsers(lastSyncTime);
         int createdCount = 0;
         int updatedCount = 0;
@@ -257,7 +230,7 @@ public class SyncService {
 
         // Update checkpoint timestamp
         state.setLastSyncTimestamp(syncStartTime.toString());
-        stateManager.saveState(state);
+        stateManagerUtil.saveState(state);
     }
 
     /**
@@ -299,9 +272,9 @@ public class SyncService {
             }
 
             // Store role values in state for future reference
-            SyncState state = stateManager.loadState();
+            SyncState state = stateManagerUtil.loadState();
             state.setRoleValues(roleValues);
-            stateManager.saveState(state);
+            stateManagerUtil.saveState(state);
 
             LOGGER.info("Successfully synchronized {} Keycloak roles to cache.", roleValues.size());
         } catch (Exception e) {
