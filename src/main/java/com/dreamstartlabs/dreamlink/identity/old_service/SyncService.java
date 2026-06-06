@@ -1,6 +1,5 @@
 package com.dreamstartlabs.dreamlink.identity.old_service;
 
-
 import com.dreamstartlabs.dreamlink.identity.config.SyncConfigProps;
 import com.dreamstartlabs.dreamlink.identity.core.client.onelogin.OneLoginClient;
 import com.dreamstartlabs.dreamlink.identity.models.dto.SyncState;
@@ -8,7 +7,6 @@ import com.dreamstartlabs.dreamlink.identity.old_client.KeycloakClient;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakRole;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.utils.StateManagerUtil;
 import org.slf4j.Logger;
@@ -30,18 +28,16 @@ public class SyncService {
     private final KeycloakClient keycloakClient;
     private final StateManagerUtil stateManagerUtil;
     private final SyncConfigProps syncConfig;
-    private final RoleCache roleCache;
+
 
     public SyncService(OneLoginClient oneLoginClient,
                        KeycloakClient keycloakClient,
                        StateManagerUtil stateManagerUtil,
-                       SyncConfigProps syncConfig,
-                       RoleCache roleCache) {
+                       SyncConfigProps syncConfig) {
         this.oneLoginClient = oneLoginClient;
         this.keycloakClient = keycloakClient;
         this.stateManagerUtil = stateManagerUtil;
         this.syncConfig = syncConfig;
-        this.roleCache = roleCache;
     }
 
     private void executeInitialSync(SyncState state, Instant syncStartTime) {
@@ -257,55 +253,7 @@ public class SyncService {
 
         List<String> assignedRoles = new ArrayList<>();
 
-        for (Long roleId : oneLoginUser.getRoleIds()) {
-            try {
-                // Step 1: Get or fetch the role name from OneLogin
-                String roleName = roleCache.getOneLoginRoleName(roleId);
 
-                if (roleName == null) {
-                    // Not in cache, fetch from OneLogin API
-                    OneLoginRole olRole = oneLoginClient.getRoleById(roleId);
-                    if (olRole == null) {
-                        LOGGER.warn("Could not fetch OneLogin role with ID {}. Skipping.", roleId);
-                        continue;
-                    }
-                    roleName = olRole.getName();
-                    // Cache it for future use
-                    roleCache.cacheOneLoginRole(roleId, roleName);
-                    LOGGER.debug("Fetched and cached OneLogin role: ID={}, Name={}", roleId, roleName);
-                }
-
-                if (roleName == null || roleName.isEmpty()) {
-                    LOGGER.warn("OneLogin role ID {} has no name. Skipping.", roleId);
-                    continue;
-                }
-
-                // Step 2: Ensure the role exists in Keycloak
-                KeycloakRole kcRole = keycloakClient.getRoleByName(roleName);
-                if (kcRole == null) {
-                    LOGGER.info("Role '{}' does not exist in Keycloak. Creating it...", roleName);
-                    kcRole = keycloakClient.createRole(roleName);
-                    if (kcRole == null) {
-                        LOGGER.warn("Failed to create role '{}' in Keycloak. Skipping assignment.", roleName);
-                        continue;
-                    }
-                }
-
-                // Step 3: Assign the role to the user in Keycloak
-                boolean assigned = keycloakClient.assignRoleToUser(keycloakUserId, roleName);
-                if (assigned) {
-                    assignedRoles.add(roleName);
-                    LOGGER.debug("Successfully assigned role '{}' to user {}", roleName, keycloakUserId);
-                } else {
-                    LOGGER.warn("Failed to assign role '{}' to user {}", roleName, keycloakUserId);
-                }
-
-            } catch (Exception e) {
-                LOGGER.error("Error processing role ID {} for user {}: {}", roleId, keycloakUserId, e.getMessage(), e);
-            }
-        }
-
-        // Set the dreamlink_roles user attribute for token claim mapping
         if (!assignedRoles.isEmpty()) {
             boolean attributeSet = keycloakClient.setUserRolesAttribute(keycloakUserId, assignedRoles);
             if (attributeSet) {
