@@ -1,7 +1,6 @@
 package com.dreamstartlabs.dreamlink.identity.old_client;
 
 import com.dreamstartlabs.dreamlink.identity.config.KeyCloakProps;
-import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakRole;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
 import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.models.response.TokenResponse;
@@ -21,18 +20,6 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.*;
 
-/**
- * Keycloak Admin REST API client.
- *
- * <p>Responsibilities:
- * <ul>
- *   <li>Token lifecycle management (fetch + cache with 60 s safety margin)</li>
- *   <li>CRUD operations on Keycloak users</li>
- *   <li>Federated-identity linking</li>
- * </ul>
- *
- * <p>Payload construction is delegated to {@link KeycloakUserMapper}.
- */
 @Component
 public class KeycloakClient {
 
@@ -54,10 +41,6 @@ public class KeycloakClient {
                 .baseUrl(keycloakProps.getApiUrl())
                 .build();
     }
-
-    // =========================================================================
-    // Token management
-    // =========================================================================
 
     /** Returns a cached, valid admin access token — refreshes automatically. */
     private synchronized String getAccessToken() {
@@ -106,18 +89,6 @@ public class KeycloakClient {
     // User lookups
     // =========================================================================
 
-    /**
-     * Searches for a Keycloak user that corresponds to the given OneLogin user.
-     *
-     * <p>Strategy (first match wins):
-     * <ol>
-     *   <li>Custom attribute {@code onelogin_id}</li>
-     *   <li>Exact username match</li>
-     *   <li>Exact e-mail match</li>
-     * </ol>
-     *
-     * @return the fully-hydrated {@link KeycloakUser}, or {@code null} if not found.
-     */
     public KeycloakUser findUser(OneLoginUser oneLoginUser) {
         String realm = keycloakProps.getRealm();
 
@@ -288,207 +259,6 @@ public class KeycloakClient {
             LOGGER.info("Keycloak user {} deleted.", keycloakUserId);
         } catch (Exception e) {
             LOGGER.error("Failed to delete Keycloak user {}: {}", keycloakUserId, e.getMessage(), e);
-        }
-    }
-
-    // =========================================================================
-    // Role management
-    // =========================================================================
-
-    /**
-     * Fetches all realm-level roles from Keycloak.
-     *
-     * @return list of all realm roles, or empty list if none found
-     */
-    public List<KeycloakRole> getAllRoles() {
-        String realm = keycloakProps.getRealm();
-        LOGGER.debug("Fetching all realm roles from Keycloak...");
-
-        try {
-            List<KeycloakRole> roles = restClient.get()
-                    .uri("/admin/realms/{realm}/roles", realm)
-                    .header("Authorization", bearerToken())
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<List<KeycloakRole>>() {});
-
-            LOGGER.debug("Successfully fetched {} realm roles.", roles == null ? 0 : roles.size());
-            return roles != null ? roles : new ArrayList<>();
-        } catch (Exception e) {
-            LOGGER.error("Failed to fetch realm roles: {}", e.getMessage(), e);
-            return new ArrayList<>();
-        }
-    }
-
-    /**
-     * Fetches a specific realm-level role by name.
-     *
-     * @param roleName the name of the role to fetch
-     * @return the role if found, or null if not found
-     */
-    public KeycloakRole getRoleByName(String roleName) {
-        String realm = keycloakProps.getRealm();
-        LOGGER.debug("Fetching role by name: {}", roleName);
-
-        try {
-            KeycloakRole role = restClient.get()
-                    .uri("/admin/realms/{realm}/roles/{name}", realm, roleName)
-                    .header("Authorization", bearerToken())
-                    .retrieve()
-                    .body(KeycloakRole.class);
-
-            if (role != null) {
-                LOGGER.debug("Found role: {} (ID: {})", roleName, role.getId());
-            } else {
-                LOGGER.debug("Role not found: {}", roleName);
-            }
-            return role;
-        } catch (Exception e) {
-            LOGGER.debug("Failed to fetch role by name '{}': {}", roleName, e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Creates a new realm-level role in Keycloak.
-     *
-     * @param roleName the name of the role to create
-     * @return the created role, or null if creation failed
-     */
-    public KeycloakRole createRole(String roleName) {
-        String realm = keycloakProps.getRealm();
-        LOGGER.info("Creating new Keycloak role: {}", roleName);
-
-        Map<String, Object> rolePayload = new java.util.HashMap<>();
-        rolePayload.put("name", roleName);
-        rolePayload.put("description", "Synced from OneLogin");
-
-        try {
-            ResponseEntity<Void> response = restClient.post()
-                    .uri("/admin/realms/{realm}/roles", realm)
-                    .header("Authorization", bearerToken())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(rolePayload)
-                    .retrieve()
-                    .toBodilessEntity();
-
-            if (response.getStatusCode().value() == 201) {
-                LOGGER.info("Successfully created role: {}", roleName);
-                // Fetch the role to get its ID
-                return getRoleByName(roleName);
-            } else {
-                LOGGER.error("Unexpected status {} creating role '{}'", response.getStatusCode(), roleName);
-                return null;
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to create role '{}': {}", roleName, e.getMessage(), e);
-            return null;
-        }
-    }
-
-    /**
-     * Assigns a realm-level role to a user.
-     * This grants the role to the user at the realm level.
-     *
-     * @param keycloakUserId the ID of the user
-     * @param roleName the name of the role to assign
-     * @return true if assignment succeeded, false otherwise
-     */
-    public boolean assignRoleToUser(String keycloakUserId, String roleName) {
-        String realm = keycloakProps.getRealm();
-        LOGGER.info("Assigning role '{}' to user {}", roleName, keycloakUserId);
-
-        try {
-            // First, get the role by name to obtain its ID
-            KeycloakRole role = getRoleByName(roleName);
-            if (role == null) {
-                LOGGER.warn("Role '{}' not found. Cannot assign to user {}", roleName, keycloakUserId);
-                return false;
-            }
-
-            // Prepare the role representation for assignment
-            List<KeycloakRole> rolesList = new ArrayList<>();
-            rolesList.add(role);
-
-            restClient.post()
-                    .uri("/admin/realms/{realm}/users/{userId}/role-mappings/realm", realm, keycloakUserId)
-                    .header("Authorization", bearerToken())
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(rolesList)
-                    .retrieve()
-                    .toBodilessEntity();
-
-            LOGGER.info("Successfully assigned role '{}' to user {}", roleName, keycloakUserId);
-            return true;
-        } catch (HttpClientErrorException.Conflict e) {
-            LOGGER.info("User {} already has role '{}' — skipping.", keycloakUserId, roleName);
-            return true;
-        } catch (Exception e) {
-            LOGGER.error("Failed to assign role '{}' to user {}: {}", roleName, keycloakUserId, e.getMessage(), e);
-            return false;
-        }
-    }
-
-    /**
-     * Removes a realm-level role from a user.
-     *
-     * @param keycloakUserId the ID of the user
-     * @param roleName the name of the role to remove
-     * @return true if removal succeeded, false otherwise
-     */
-    public boolean removeRoleFromUser(String keycloakUserId, String roleName) {
-        String realm = keycloakProps.getRealm();
-        LOGGER.info("Removing role '{}' from user {}", roleName, keycloakUserId);
-
-        try {
-            // First, get the role by name to obtain its ID
-            KeycloakRole role = getRoleByName(roleName);
-            if (role == null) {
-                LOGGER.warn("Role '{}' not found. Cannot remove from user {}", roleName, keycloakUserId);
-                return false;
-            }
-
-            // Prepare the role representation for removal
-            List<KeycloakRole> rolesList = new ArrayList<>();
-            rolesList.add(role);
-
-            restClient.method(org.springframework.http.HttpMethod.DELETE)
-                    .uri("/admin/realms/{realm}/users/{userId}/role-mappings/realm", realm, keycloakUserId)
-                    .header("Authorization", bearerToken())
-                    .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-                    .body(rolesList)
-                    .retrieve()
-                    .toBodilessEntity();
-
-            LOGGER.info("Successfully removed role '{}' from user {}", roleName, keycloakUserId);
-            return true;
-        } catch (Exception e) {
-            LOGGER.error("Failed to remove role '{}' from user {}: {}", roleName, keycloakUserId, e.getMessage(), e);
-            return false;
-        }
-    }
-
-    /**
-     * Fetches the realm-level roles assigned to a specific user.
-     *
-     * @param keycloakUserId the ID of the user
-     * @return list of roles assigned to the user, or empty list if none
-     */
-    public List<KeycloakRole> getUserRoles(String keycloakUserId) {
-        String realm = keycloakProps.getRealm();
-        LOGGER.debug("Fetching roles for user {}", keycloakUserId);
-
-        try {
-            List<KeycloakRole> roles = restClient.get()
-                    .uri("/admin/realms/{realm}/users/{userId}/role-mappings/realm", realm, keycloakUserId)
-                    .header("Authorization", bearerToken())
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<List<KeycloakRole>>() {});
-
-            LOGGER.debug("User {} has {} realm role(s).", keycloakUserId, roles == null ? 0 : roles.size());
-            return roles != null ? roles : new ArrayList<>();
-        } catch (Exception e) {
-            LOGGER.error("Failed to fetch user roles for {}: {}", keycloakUserId, e.getMessage(), e);
-            return new ArrayList<>();
         }
     }
 
