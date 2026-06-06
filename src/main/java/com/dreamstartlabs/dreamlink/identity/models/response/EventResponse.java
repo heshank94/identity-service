@@ -1,6 +1,6 @@
 package com.dreamstartlabs.dreamlink.identity.models.response;
 
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.util.List;

@@ -5,7 +5,7 @@ import com.dreamstartlabs.dreamlink.identity.core.client.onelogin.OneLoginClient
 import com.dreamstartlabs.dreamlink.identity.models.dto.SyncState;
 import com.dreamstartlabs.dreamlink.identity.old_client.KeycloakClient;
 import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginEvent;
 import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.utils.StateManagerUtil;
 import org.slf4j.Logger;

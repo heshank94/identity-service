@@ -1,6 +1,6 @@
 package com.dreamstartlabs.dreamlink.identity.utils;
 
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginRole;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginRole;
 import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.service.onelogin.OneLoginClientService;
 import lombok.RequiredArgsConstructor;
@@ -44,7 +44,7 @@ public class RoleResolverUtil {
     private String resolveRoleName(Long roleId) {
         String cached = roleNameCache.get(roleId);
         if (cached != null) {
-            log.debug("Role ID {} resolved from cache: {}", roleId, cached);
+            log.info("Role ID {} resolved from cache: {}", roleId, cached);
             return cached;
         }
 
@@ -55,7 +55,7 @@ public class RoleResolverUtil {
         }
 
         roleNameCache.put(roleId, role.getName());
-        log.debug("Role ID {} fetched and cached: {}", roleId, role.getName());
+        log.info("Role ID {} fetched and cached: {}", roleId, role.getName());
         return role.getName();
     }
 
