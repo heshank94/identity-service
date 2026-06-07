@@ -10,8 +10,6 @@ import java.util.List;
  */
 public interface KeyCloakClient {
 
-    void authenticate();
-
     boolean userExists(OneLoginUser oneLoginUser);
     KeyCloakUser findUserByOneLoginId(Long oneLoginId);
 
