@@ -1,10 +1,10 @@
 package com.dreamstartlabs.dreamlink.identity.old_client;
 
 import com.dreamstartlabs.dreamlink.identity.config.KeyCloakProps;
-import com.dreamstartlabs.dreamlink.identity.old_model.KeycloakUser;
+import com.dreamstartlabs.dreamlink.identity.models.dto.KeyCloakUser;
 import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.models.response.TokenResponse;
-import com.dreamstartlabs.dreamlink.identity.old_utils.KeycloakUserMapper;
+import com.dreamstartlabs.dreamlink.identity.utils.KeyCloakUserMapperUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -28,13 +28,13 @@ public class KeycloakClient {
     private static final int DEFAULT_TOKEN_TTL_SECONDS   = 300;
 
     private final KeyCloakProps keycloakProps;
-    private final KeycloakUserMapper        userMapper;
+    private final KeyCloakUserMapperUtil userMapper;
     private final RestClient restClient;
 
     private String  accessToken;
     private Instant tokenExpiration;
 
-    public KeycloakClient(KeyCloakProps keycloakProps, KeycloakUserMapper userMapper) {
+    public KeycloakClient(KeyCloakProps keycloakProps, KeyCloakUserMapperUtil userMapper) {
         this.keycloakProps = keycloakProps;
         this.userMapper    = userMapper;
         this.restClient    = RestClient.builder()
@@ -89,7 +89,7 @@ public class KeycloakClient {
     // User lookups
     // =========================================================================
 
-    public KeycloakUser findUser(OneLoginUser oneLoginUser) {
+    public KeyCloakUser findUser(OneLoginUser oneLoginUser) {
         String realm = keycloakProps.getRealm();
 
         return searchByAttribute(realm, "onelogin_id", String.valueOf(oneLoginUser.getId()))
@@ -102,9 +102,9 @@ public class KeycloakClient {
     /**
      * Finds a Keycloak user by their stored {@code onelogin_id} attribute.
      *
-     * @return the fully-hydrated {@link KeycloakUser}, or {@code null} if not found.
+     * @return the fully-hydrated {@link KeyCloakUser}, or {@code null} if not found.
      */
-    public KeycloakUser findUserByOneLoginId(Long oneLoginId) {
+    public KeyCloakUser findUserByOneLoginId(Long oneLoginId) {
         String realm = keycloakProps.getRealm();
         return searchByAttribute(realm, "onelogin_id", String.valueOf(oneLoginId))
                 .map(u -> getUserById(u.getId()))
@@ -115,15 +115,15 @@ public class KeycloakClient {
      * Fetches the full user representation by Keycloak ID.
      * User-list endpoints omit attributes, so this is always needed after a search.
      *
-     * @return the {@link KeycloakUser}, or {@code null} on failure.
+     * @return the {@link KeyCloakUser}, or {@code null} on failure.
      */
-    public KeycloakUser getUserById(String userId) {
+    public KeyCloakUser getUserById(String userId) {
         String realm = keycloakProps.getRealm();
         LOGGER.debug("Fetching full Keycloak user for ID: {}", userId);
 
         return executeGet(
                 "/admin/realms/{realm}/users/{id}",
-                KeycloakUser.class,
+                KeyCloakUser.class,
                 "fetch user by ID " + userId,
                 realm, userId
         ).orElse(null);
@@ -140,7 +140,7 @@ public class KeycloakClient {
         String realm = keycloakProps.getRealm();
         LOGGER.info("Creating Keycloak user: username={}, email={}", oneLoginUser.getUsername(), oneLoginUser.getEmail());
 
-        Map<String, Object> body = userMapper.toKeycloakPayload(oneLoginUser);
+        Map<String, Object> body = userMapper.toCreatePayload(oneLoginUser, List.of("ADD_ROLES_HERE"));
         LOGGER.debug("Create user payload: {}", body);
 
         try {
@@ -175,7 +175,7 @@ public class KeycloakClient {
         String realm     = keycloakProps.getRealm();
         String idpAlias  = keycloakProps.getIdpAlias();
 
-        Map<String, String> body = userMapper.toFederatedIdentityPayload(oneLoginUser, idpAlias);
+        Map<String, String> body = userMapper.toFederatedIdentityPayload(oneLoginUser);
         LOGGER.info("Linking user {} to IDP '{}' (OneLogin ID: {})", keycloakUserId, idpAlias, oneLoginUser.getId());
         LOGGER.debug("Federated identity payload: {}", body);
 
@@ -204,10 +204,10 @@ public class KeycloakClient {
 
         try {
             // 1. Fetch existing user (to preserve attributes like dreamlink_roles)
-            KeycloakUser existingUser = getUserById(keycloakUserId);
+            KeyCloakUser existingUser = getUserById(keycloakUserId);
 
             // 2. Build new payload from mapper
-            Map<String, Object> body = userMapper.toKeycloakPayload(oneLoginUser);
+            Map<String, Object> body = userMapper.toUpdatePayload(oneLoginUser, List.of("ADD_ROLES_HERE"));
 
             // 3. Merge attributes (CRITICAL FIX)
             Map<String, List<String>> mergedAttributes = new HashMap<>();
@@ -293,10 +293,10 @@ public class KeycloakClient {
      * Returns an {@link Optional} holding the first result's partial representation
      * (attributes are absent — always follow up with {@link #getUserById}).
      */
-    private Optional<KeycloakUser> searchByAttribute(String realm, String attrName, String attrValue) {
+    private Optional<KeyCloakUser> searchByAttribute(String realm, String attrName, String attrValue) {
         LOGGER.debug("Searching Keycloak users by attribute {}={}", attrName, attrValue);
         try {
-            List<KeycloakUser> users = restClient.get()
+            List<KeyCloakUser> users = restClient.get()
                     .uri("/admin/realms/{realm}/users?q={attr}:{val}", realm, attrName, attrValue)
                     .header("Authorization", bearerToken())
                     .retrieve()
@@ -315,10 +315,10 @@ public class KeycloakClient {
      * Searches for users by a simple query parameter (e.g. {@code username}, {@code email})
      * using Keycloak's {@code &exact=true} flag.
      */
-    private Optional<KeycloakUser> searchByParam(String realm, String paramName, String paramValue) {
+    private Optional<KeyCloakUser> searchByParam(String realm, String paramName, String paramValue) {
         LOGGER.debug("Searching Keycloak users by {}={}", paramName, paramValue);
         try {
-            List<KeycloakUser> users = restClient.get()
+            List<KeyCloakUser> users = restClient.get()
                     .uri("/admin/realms/{realm}/users?{param}={val}&exact=true", realm, paramName, paramValue)
                     .header("Authorization", bearerToken())
                     .retrieve()
@@ -357,7 +357,7 @@ public class KeycloakClient {
             }
 
             // 1. Fetch existing user (IMPORTANT: we need current attributes)
-            KeycloakUser user = getUserById(keycloakUserId);
+            KeyCloakUser user = getUserById(keycloakUserId);
             if (user == null) {
                 LOGGER.warn("User {} not found in Keycloak.", keycloakUserId);
                 return false;

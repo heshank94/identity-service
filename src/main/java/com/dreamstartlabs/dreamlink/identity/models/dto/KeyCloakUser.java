@@ -1,4 +1,4 @@
-package com.dreamstartlabs.dreamlink.identity.old_model;
+package com.dreamstartlabs.dreamlink.identity.models.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
@@ -16,17 +16,15 @@ import java.util.Map;
 @NoArgsConstructor
 @ToString
 @EqualsAndHashCode
-public class KeycloakUser {
-
+public class KeyCloakUser {
     private String id;
     private String username;
     private String email;
+    private String firstName;
+    private String lastName;
     private boolean enabled;
     private Map<String, List<String>> attributes;
 
-    /**
-     * Convenience accessor for the stored onelogin_id attribute.
-     */
     public String getOneLoginId() {
         if (attributes == null) return null;
         List<String> values = attributes.get("onelogin_id");
