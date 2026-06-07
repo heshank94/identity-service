@@ -1,8 +1,8 @@
 package com.dreamstartlabs.dreamlink.identity.service.orchestrator;
 
 import com.dreamstartlabs.dreamlink.identity.models.dto.SyncState;
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginEvent;
-import com.dreamstartlabs.dreamlink.identity.old_model.OneLoginUser;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginEvent;
+import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.service.keycloak.KeyCloakClientService;
 import com.dreamstartlabs.dreamlink.identity.service.onelogin.OneLoginClientService;
 import com.dreamstartlabs.dreamlink.identity.utils.RoleResolverUtil;
@@ -61,9 +61,8 @@ public class OrchestratorService {
                 }
 
                 List<String> roleNames = roleResolverUtil.resolveRoleNames(user);
-                boolean existed = keyCloakClientService.userExists(user);
 
-                if (!existed) {
+                if (!keyCloakClientService.userExists(user)) {
                     keyCloakClientService.createUser(user, roleNames);
                     created++;
                 } else {
@@ -107,7 +106,6 @@ public class OrchestratorService {
                     continue;
                 }
 
-                // Inactive/suspended users get disabled in Keycloak rather than synced
                 if (!isActive(user)) {
                     keyCloakClientService.disableUser(user);
                     disabled++;
@@ -115,9 +113,8 @@ public class OrchestratorService {
                 }
 
                 List<String> roleNames = roleResolverUtil.resolveRoleNames(user);
-                boolean existed = keyCloakClientService.userExists(user);
 
-                if (!existed) {
+                if (!keyCloakClientService.userExists(user)) {
                     keyCloakClientService.createUser(user, roleNames);
                     created++;
                 } else {
@@ -159,7 +156,7 @@ public class OrchestratorService {
     }
 
     private boolean isActive(OneLoginUser user) {
-        return user.getStatus() == 1;
+        return user.getStatus() != null && user.getStatus() == 1;
     }
 
 }
