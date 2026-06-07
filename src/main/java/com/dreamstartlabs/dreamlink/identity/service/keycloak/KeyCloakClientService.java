@@ -109,6 +109,8 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
                     .uri(uriBuilder -> uriBuilder
                             .path("/admin/realms/{realm}/users")
                             .queryParam("q", attrName + ":" + attrValue)
+                            .queryParam("exact", true)
+                            .queryParam("briefRepresentation", false)
                             .build(keyCloakProps.getRealm()))
                     .header(AUTHORIZATION, bearer())
                     .retrieve()
