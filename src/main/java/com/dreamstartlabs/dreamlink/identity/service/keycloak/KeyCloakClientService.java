@@ -23,6 +23,8 @@ import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
+import static com.dreamstartlabs.dreamlink.identity.utils.Constants.AUTHORIZATION;
+
 /**
  * @author Heshan Karunaratne
  */
@@ -108,7 +110,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
                             .path("/admin/realms/{realm}/users")
                             .queryParam("q", attrName + ":" + attrValue)
                             .build(keyCloakProps.getRealm()))
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<List<KeyCloakUser>>() {
                     })
@@ -131,7 +133,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
                             .queryParam(paramName, paramValue)
                             .queryParam("exact", true)
                             .build(keyCloakProps.getRealm()))
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<List<KeyCloakUser>>() {
                     })
@@ -152,7 +154,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
             ResponseEntity<Void> response = webClient
                     .post()
                     .uri("/admin/realms/{realm}/users", keyCloakProps.getRealm())
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(keyCloakUserMapperUtil.toCreatePayload(oneLoginUser, roleNames))
                     .retrieve()
@@ -195,7 +197,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
             webClient
                     .put()
                     .uri("/admin/realms/{realm}/users/{id}", keyCloakProps.getRealm(), existing.getId())
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(keyCloakUserMapperUtil.toUpdatePayload(oneLoginUser, roleNames))
                     .retrieve()
@@ -232,7 +234,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
             webClient
                     .put()
                     .uri("/admin/realms/{realm}/users/{id}", keyCloakProps.getRealm(), keycloakUserId)
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(keyCloakUserMapperUtil.toDisablePayload())
                     .retrieve()
@@ -255,7 +257,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
                     .post()
                     .uri("/admin/realms/{realm}/users/{id}/federated-identity/{idp}",
                             keyCloakProps.getRealm(), keycloakUserId, keyCloakProps.getIdpAlias())
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(keyCloakUserMapperUtil.toFederatedIdentityPayload(oneLoginUser))
                     .retrieve()
@@ -277,7 +279,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
             return webClient
                     .get()
                     .uri("/admin/realms/{realm}/users/{id}", keyCloakProps.getRealm(), keycloakUserId)
-                    .header("Authorization", bearer())
+                    .header(AUTHORIZATION, bearer())
                     .retrieve()
                     .bodyToMono(KeyCloakUser.class)
                     .block();
