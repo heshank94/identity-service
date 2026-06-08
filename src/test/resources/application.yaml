@@ -1,0 +1,43 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: dsl-dreamlink-identity-backend
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+kafka:
+  topic:
+    environment: test
+    application: identity
+    version: v1
+
+onelogin:
+  base:
+    api-url: http://localhost:9999   # fake endpoint
+  client-id: test
+  client-secret: test
+
+keycloak:
+  base:
+    api-url: http://localhost:9999
+  realm: test
+  client-id: test
+  client-secret: test
+  idp-alias: onelogin
+
+sync:
+  fixedDelay: PT24H
+  state-file: sync-state-test.json
+  delete-keycloak-users: false
+
+logging:
+  level:
+    root: WARN
