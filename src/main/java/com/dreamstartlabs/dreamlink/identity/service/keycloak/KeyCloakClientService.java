@@ -150,7 +150,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
 
 
     @Override
-    public void createUser(OneLoginUser oneLoginUser, List<String> roleNames) {
+    public String createUser(OneLoginUser oneLoginUser, List<String> roleNames) {
         log.info("Creating Keycloak user: username={}", oneLoginUser.getUsername());
         try {
             ResponseEntity<Void> response = webClient
@@ -164,11 +164,17 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
                     .block();
 
             if (response != null && response.getStatusCode().value() == 201) {
-                extractIdFromLocation(response).ifPresentOrElse(
-                        id -> linkFederatedIdentity(id, oneLoginUser),
-                        () -> log.warn("User created but Location header missing — cannot link federated identity.")
-                );
+
+                String keycloakId = extractIdFromLocation(response)
+                        .orElseThrow(() -> new KeyCloakException(
+                                "User created but Location header missing — cannot extract ID"
+                        ));
+
+                linkFederatedIdentity(keycloakId, oneLoginUser);
+                log.info("Keycloak user created with id={}", keycloakId);
+                return keycloakId;
             }
+            throw new KeyCloakException("Failed to create user — unexpected response");
         } catch (Exception e) {
             log.error("Failed to create Keycloak user '{}': {}", oneLoginUser.getUsername(), e.getMessage());
             throw new KeyCloakException("Failed to create user", e);
@@ -183,7 +189,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
     }
 
     @Override
-    public void updateUser(OneLoginUser oneLoginUser, List<String> roleNames) {
+    public String updateUser(OneLoginUser oneLoginUser, List<String> roleNames) {
         log.info("Updating Keycloak user: username={}", oneLoginUser.getUsername());
 
         KeyCloakUser existing = findKeycloakUser(oneLoginUser)
@@ -192,7 +198,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
 
         if (existing == null) {
             log.warn("Cannot update — user not found in Keycloak: {}", oneLoginUser.getUsername());
-            return;
+            throw new KeyCloakException("User not found for update");
         }
 
         try {
@@ -207,6 +213,7 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
                     .block();
 
             log.info("Keycloak user {} updated.", existing.getId());
+            return existing.getId();
         } catch (Exception e) {
             log.error("Failed to update Keycloak user {}: {}", existing.getId(), e.getMessage());
             throw new KeyCloakException("Failed to update user", e);

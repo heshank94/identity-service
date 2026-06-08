@@ -13,8 +13,8 @@ public interface KeyCloakClient {
     boolean userExists(OneLoginUser oneLoginUser);
     KeyCloakUser findUserByOneLoginId(Long oneLoginId);
 
-    void createUser(OneLoginUser oneLoginUser, List<String> roleNames);
-    void updateUser(OneLoginUser oneLoginUser, List<String> roleNames);
+    String createUser(OneLoginUser oneLoginUser, List<String> roleNames);
+    String updateUser(OneLoginUser oneLoginUser, List<String> roleNames);
     void disableUser(OneLoginUser oneLoginUser);
     boolean disableUserByOneLoginId(Long oneLoginId);
 

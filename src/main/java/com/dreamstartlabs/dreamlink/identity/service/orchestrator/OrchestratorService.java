@@ -1,5 +1,8 @@
 package com.dreamstartlabs.dreamlink.identity.service.orchestrator;
 
+import com.dreamstartlabs.dreamlink.identity.kafka.SyncEventBuilder;
+import com.dreamstartlabs.dreamlink.identity.kafka.producer.SyncEventProducer;
+import com.dreamstartlabs.dreamlink.identity.kafka.utils.KafkaTopicResolverUtil;
 import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginEvent;
 import com.dreamstartlabs.dreamlink.identity.models.dto.OneLoginUser;
 import com.dreamstartlabs.dreamlink.identity.models.dto.SyncState;
@@ -27,6 +30,9 @@ public class OrchestratorService {
     private final KeyCloakClientService keyCloakClientService;
     private final StateManagerUtil stateManagerUtil;
     private final RoleResolverUtil roleResolverUtil;
+    private final SyncEventBuilder syncEventBuilder;
+    private final SyncEventProducer syncEventProducer;
+    private final KafkaTopicResolverUtil kafkaTopicResolverUtil;
     private boolean isSyncRunning = false;
 
     public synchronized void syncAll() {
@@ -68,16 +74,18 @@ public class OrchestratorService {
                 }
 
                 List<String> roleNames = roleResolverUtil.resolveRoleNames(user);
-
+                String keycloakId;
                 if (!keyCloakClientService.userExists(user)) {
-                    keyCloakClientService.createUser(user, roleNames);
+                    keycloakId = keyCloakClientService.createUser(user, roleNames);
                     log.debug("SYNC_CREATE | type=initial | userID={} | username={} | roles={}",
                             user.getId(), user.getUsername(), roleNames);
+                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user), syncEventBuilder.buildCreatedEvent(user, roleNames, keycloakId));
                     created++;
                 } else {
-                    keyCloakClientService.updateUser(user, roleNames);
+                    keycloakId = keyCloakClientService.updateUser(user, roleNames);
                     log.debug("SYNC_UPDATE | type=initial | userID={} | username={} | roles={}",
                             user.getId(), user.getUsername(), roleNames);
+                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user), syncEventBuilder.buildUpdatedEvent(user, roleNames, keycloakId));
                     updated++;
                 }
 
@@ -143,7 +151,16 @@ public class OrchestratorService {
                 }
 
                 if (!isActive(user)) {
+                    String keycloakId = keyCloakClientService
+                            .findUserByOneLoginId(user.getId())
+                            .getId();
+
                     keyCloakClientService.disableUser(user);
+                    syncEventProducer.publish(
+                            kafkaTopicResolverUtil.resolve(user),
+                            syncEventBuilder.buildDisabledEvent(user, keycloakId)
+                    );
+
                     log.debug("SYNC_DISABLE | type=incremental | userID={} | username={} | status={}",
                             user.getId(), user.getUsername(), user.getStatus());
                     disabled++;
@@ -151,16 +168,18 @@ public class OrchestratorService {
                 }
 
                 List<String> roleNames = roleResolverUtil.resolveRoleNames(user);
-
+                String keycloakId;
                 if (!keyCloakClientService.userExists(user)) {
-                    keyCloakClientService.createUser(user, roleNames);
+                    keycloakId = keyCloakClientService.createUser(user, roleNames);
                     log.debug("SYNC_CREATE | type=incremental | userID={} | username={} | roles={}",
                             user.getId(), user.getUsername(), roleNames);
+                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user), syncEventBuilder.buildCreatedEvent(user, roleNames, keycloakId));
                     created++;
                 } else {
-                    keyCloakClientService.updateUser(user, roleNames);
+                    keycloakId = keyCloakClientService.updateUser(user, roleNames);
                     log.debug("SYNC_UPDATE | type=incremental | userID={} | username={} | roles={}",
                             user.getId(), user.getUsername(), roleNames);
+                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user), syncEventBuilder.buildUpdatedEvent(user, roleNames, keycloakId));
                     updated++;
                 }
 
@@ -186,7 +205,9 @@ public class OrchestratorService {
         List<OneLoginEvent> deletionEvents = oneLoginClientService.getDeletionEvents(lastSyncTime);
         log.info("Fetched {} deletion events from OneLogin.", deletionEvents.size());
 
-        int disabled = 0, notFound = 0, failed = 0;
+        int disabled = 0;
+        int notFound = 0;
+        int failed = 0;
         List<Long> failedUserIds = new ArrayList<>();
 
         for (OneLoginEvent event : deletionEvents) {
@@ -195,18 +216,46 @@ public class OrchestratorService {
                 continue;
             }
             try {
-                boolean wasDisabled = keyCloakClientService.disableUserByOneLoginId(event.getUserId());
+
+                Long oneLoginId = event.getUserId();
+
+                boolean wasDisabled =
+                        keyCloakClientService.disableUserByOneLoginId(oneLoginId);
+
                 if (wasDisabled) {
+
                     log.debug("SYNC_DISABLE | type=deletion | oneLoginUserID={} | eventID={}",
-                            event.getUserId(), event.getId());
+                            oneLoginId, event.getId());
+
+                    String keycloakId =
+                            keyCloakClientService
+                                    .findUserByOneLoginId(oneLoginId).getId();
+
+                    if (keycloakId != null) {
+
+                        OneLoginUser stub = new OneLoginUser();
+                        stub.setId(oneLoginId);
+
+                        syncEventProducer.publish(
+                                kafkaTopicResolverUtil.resolve(stub),
+                                syncEventBuilder.buildDisabledEvent(stub, keycloakId)
+                        );
+
+                    } else {
+                        log.warn("SYNC_EVENT_SKIP | type=deletion | oneLoginUserID={} | reason=missing-keycloak-id",
+                                oneLoginId);
+                    }
+
                     disabled++;
+
                 } else {
-                    log.warn("SYNC_NOT_FOUND | type=deletion | oneLoginUserID={} | eventID={} | reason=no-matching-keycloak-user",
+                    log.warn("SYNC_NOT_FOUND | type=deletion | oneLoginUserID={} | eventID={}",
                             event.getUserId(), event.getId());
                     notFound++;
                 }
+
             } catch (Exception e) {
-                log.error("SYNC_FAIL | type=deletion | oneLoginUserID={} | eventID={} | reason={} | action=manual-review-required",
+                log.error("SYNC_FAIL | type=deletion | oneLoginUserID={} | eventID={} | reason={}",
                         event.getUserId(), event.getId(), e.getMessage(), e);
                 failedUserIds.add(event.getUserId());
                 failed++;

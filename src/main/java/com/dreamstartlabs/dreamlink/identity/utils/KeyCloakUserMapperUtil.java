@@ -9,6 +9,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.dreamstartlabs.dreamlink.identity.utils.CustomAttributeUtil.extract;
+
 /**
  * @author Heshan Karunaratne
  */
@@ -58,8 +60,8 @@ public class KeyCloakUserMapperUtil {
         attributes.put("title", List.of(nullSafe(user.getTitle())));
         attributes.put("phone", List.of(nullSafe(user.getPhone())));
         attributes.put("company", List.of(nullSafe(user.getCompany())));
-        attributes.put("dreamlink_tenant", List.of(extractCustomAttribute(user, "tenant")));
-        attributes.put("region", List.of(extractCustomAttribute(user, "region")));
+        attributes.put("dreamlink_tenant", List.of(extract(user, "tenant")));
+        attributes.put("region", List.of(extract(user, "region")));
         return attributes;
     }
 
@@ -71,9 +73,4 @@ public class KeyCloakUserMapperUtil {
         return value != null ? value : "";
     }
 
-    private String extractCustomAttribute(OneLoginUser user, String key) {
-        if (user.getCustomAttributes() == null) return "";
-        Object value = user.getCustomAttributes().get(key);
-        return value != null ? value.toString() : "";
-    }
 }
