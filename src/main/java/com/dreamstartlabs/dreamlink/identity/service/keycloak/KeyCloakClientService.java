@@ -213,6 +213,8 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
                     .block();
 
             log.info("Keycloak user {} updated.", existing.getId());
+            linkFederatedIdentity(existing.getId(), oneLoginUser);
+
             return existing.getId();
         } catch (Exception e) {
             log.error("Failed to update Keycloak user {}: {}", existing.getId(), e.getMessage());
@@ -262,6 +264,8 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
         log.info("Linking user {} to IDP '{}' (OneLogin ID: {})",
                 keycloakUserId, keyCloakProps.getIdpAlias(), oneLoginUser.getId());
         try {
+            deleteExistingFederatedIdentity(keycloakUserId);
+
             webClient
                     .post()
                     .uri("/admin/realms/{realm}/users/{id}/federated-identity/{idp}",
@@ -298,5 +302,23 @@ public class KeyCloakClientService extends AbstractTokenManager implements KeyCl
         }
     }
 
+    private void deleteExistingFederatedIdentity(String keycloakUserId) {
+        try {
+            webClient
+                    .delete()
+                    .uri("/admin/realms/{realm}/users/{id}/federated-identity/{idp}",
+                            keyCloakProps.getRealm(), keycloakUserId, keyCloakProps.getIdpAlias())
+                    .header(AUTHORIZATION, bearer())
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block();
 
+            log.debug("Existing federated identity removed for user {}.", keycloakUserId);
+        } catch (WebClientResponseException.NotFound e) {
+            log.debug("No existing federated identity found for user {} — nothing to delete.", keycloakUserId);
+        } catch (Exception e) {
+            log.warn("Failed to delete existing federated identity for user {}: {}", keycloakUserId, e.getMessage());
+        }
+
+    }
 }
