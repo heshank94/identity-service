@@ -1,15 +1,16 @@
 package com.dreamstartlabs.dreamlink.identity.kafka.events;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+
+import java.util.Map;
+import java.util.UUID;
 
 /**
- * @param meta the metadata container with event tracing and audit information
- * @param data the generic business payload of the event
- * @param <T>  the type of the event payload data
  * @author Heshan Karunaratne
  */
-public record KafkaEvent<T>(
+public record KafkaEvent<T extends UserEventAction>(
         Meta meta,
-        T data
+        @JsonAnyGetter Map<String, T> payload
 ) {
     public record Meta(
             String correlationId,
@@ -19,5 +20,15 @@ public record KafkaEvent<T>(
 //            ResourceType resourceType,
 //            Source source
     ) {
+    }
+
+    public static <T extends UserEventAction> KafkaEvent<T> of(String eventName, T data) {
+        return new KafkaEvent<>(
+                new Meta(
+                        UUID.randomUUID().toString(),
+                        "system"
+                ),
+                Map.of(eventName, data)
+        );
     }
 }
