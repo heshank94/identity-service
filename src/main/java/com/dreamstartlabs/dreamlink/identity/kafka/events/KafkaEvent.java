@@ -6,7 +6,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * @author Heshan Karunaratne
+ * Generic wrapper for Kafka events with metadata and a dynamic payload.
+ *
+ * @param meta metadata information such as correlation and actor details
+ * @param payload dynamic event payload mapped by event name
+ * @param <T> type of event payload extending UserEventAction
  */
 public record KafkaEvent<T extends UserEventAction>(
         Meta meta,

@@ -2,7 +2,6 @@ package com.dreamstartlabs.dreamlink.identity.models.dto;
 
 import lombok.*;
 
-import java.util.List;
 
 /**
  * @author Heshan Karunaratne

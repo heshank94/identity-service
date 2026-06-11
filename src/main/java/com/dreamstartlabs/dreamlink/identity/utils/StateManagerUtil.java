@@ -33,7 +33,9 @@ public class StateManagerUtil {
             log.debug("Sync state loaded. Last sync: {}", state.getLastSyncTimestamp());
             return state;
         } catch (IOException e) {
-            log.error("Failed to read sync state file '{}'. Falling back to clean state. Error: {}", stateFile.getAbsolutePath(), e.getMessage());
+            log.error("Failed to read sync state file '{}'. Falling back to clean state. Error: {}",
+                    stateFile.getAbsolutePath(),
+                    e.getMessage());
             return defaultState();
         }
     }

@@ -79,13 +79,15 @@ public class OrchestratorService {
                     keycloakId = keyCloakClientService.createUser(user, roleNames);
                     log.debug("SYNC_CREATE | type=initial | userID={} | username={} | roles={}",
                             user.getId(), user.getUsername(), roleNames);
-                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user), syncEventBuilder.buildCreatedEvent(user, roleNames, keycloakId));
+                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user),
+                            syncEventBuilder.buildCreatedEvent(user, roleNames, keycloakId));
                     created++;
                 } else {
                     keycloakId = keyCloakClientService.updateUser(user, roleNames);
                     log.debug("SYNC_UPDATE | type=initial | userID={} | username={} | roles={}",
                             user.getId(), user.getUsername(), roleNames);
-                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user), syncEventBuilder.buildUpdatedEvent(user, roleNames, keycloakId));
+                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user),
+                            syncEventBuilder.buildUpdatedEvent(user, roleNames, keycloakId));
                     updated++;
                 }
 
@@ -173,13 +175,15 @@ public class OrchestratorService {
                     keycloakId = keyCloakClientService.createUser(user, roleNames);
                     log.debug("SYNC_CREATE | type=incremental | userID={} | username={} | roles={}",
                             user.getId(), user.getUsername(), roleNames);
-                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user), syncEventBuilder.buildCreatedEvent(user, roleNames, keycloakId));
+                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user),
+                            syncEventBuilder.buildCreatedEvent(user, roleNames, keycloakId));
                     created++;
                 } else {
                     keycloakId = keyCloakClientService.updateUser(user, roleNames);
                     log.debug("SYNC_UPDATE | type=incremental | userID={} | username={} | roles={}",
                             user.getId(), user.getUsername(), roleNames);
-                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user), syncEventBuilder.buildUpdatedEvent(user, roleNames, keycloakId));
+                    syncEventProducer.publish(kafkaTopicResolverUtil.resolve(user),
+                            syncEventBuilder.buildUpdatedEvent(user, roleNames, keycloakId));
                     updated++;
                 }
 
