@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Pre-commit hook: validates branch name before commit created
+
+branch_name=$(git rev-parse --abbrev-ref HEAD)
+
+pattern='^(feat|fix|chore|refactor|docs|test|ci|build|perf|revert|hotfix|release|review|feature)/(([A-Z]+-[0-9]+-)?[a-z0-9]+(-[a-z0-9]+)*)$'
+
+# Validate branch name
+if ! echo "$branch_name" | grep -Eq "$pattern"; then
+  echo "Invalid branch name: $branch_name"
+  echo "Expected formats:"
+  echo "  type/short-description"
+  echo "  type/PROJ-123-short-description"
+  echo ""
+  echo "Examples:"
+  echo "  feat/add-login-feature"
+  echo "  feat/PROJ-123-add-login-feature"
+  echo "  fix/payment-timeout"
+  exit 1
+fi
